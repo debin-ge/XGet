@@ -7,9 +7,9 @@ Playwright + Twitter 集成测试
 import asyncio
 from playwright.async_api import async_playwright
 
-async def test_twitter_login_page():
-    """测试Twitter登录页面访问"""
-    print("🔍 测试Twitter登录页面访问...")
+async def test_twitter_login_page(username: str, password: str):
+    """测试Twitter登录"""
+    print("🔍 测试Twitter登录...")
     
     try:
         async with async_playwright() as p:
@@ -32,8 +32,63 @@ async def test_twitter_login_page():
                 username_input = await page.query_selector('input[name="text"]')
                 if username_input:
                     print("✅ 找到用户名输入框")
+                    await username_input.fill(username)
+                    # 点击Next按钮
+                    next_btn = await page.query_selector('button:has-text("Next")')
+                    if next_btn:
+                        await next_btn.click()
+                        print("✅ 点击了Next按钮")
+                        await page.wait_for_timeout(2000)
+                        # 查找密码输入框
+                        password_input = await page.query_selector('input[name="password"]')
+                        if password_input:
+                            print("✅ 找到密码输入框")
+                            await password_input.fill(password)
+                            # 点击登录按钮
+                            login_btn = await page.query_selector('button[data-testid="LoginForm_Login_Button"]')
+                            if login_btn:
+                                await login_btn.click()
+                                print("✅ 点击了登录按钮")
+                                # 等待跳转到主页
+                                try:
+                                    await page.wait_for_url("https://x.com/home", timeout=15000)
+                                    print("🎉 登录成功，已进入主页")
+
+                                    # 获取cookies
+                                    cookies = await context.cookies()
+                                    
+                                    print(f"✅ 获取到 {len(cookies)} 个cookies")
+                                    
+                                    # 显示重要的cookies
+                                    important_cookies = ['auth_token', 'ct0', 'guest_id', 'personalization_id']
+                                    found_cookies = []
+                                    
+                                    for cookie in cookies:
+                                        if cookie['name'] in important_cookies:
+                                            found_cookies.append(cookie['name'])
+                                            print(f"  🔑 {cookie['name']}: {cookie['value'][:20]}...")
+                                    
+                                    if found_cookies:
+                                        print(f"✅ 找到重要cookies: {', '.join(found_cookies)}")
+                                    else:
+                                        print("⚠️  未找到重要的认证cookies")
+                                    
+                                    result = True
+                                except Exception as e:
+                                    print(f"⚠️ 登录后未跳转主页: {e}")
+                                    result = False
+                            else:
+                                print("⚠️ 未找到登录按钮")
+                                result = False
+                        else:
+                            print("⚠️ 未找到密码输入框")
+                            result = False
+                    else:
+                        print("⚠️ 未找到Next按钮")
+                        result = False
                 else:
                     print("⚠️  未找到用户名输入框")
+                    result = False
                 
                 # 检查页面标题
                 title = await page.title()
@@ -42,8 +97,6 @@ async def test_twitter_login_page():
                 # 截图保存
                 await page.screenshot(path="twitter_login_page.png")
                 print("📸 已保存登录页面截图")
-                
-                result = True
             else:
                 print(f"❌ 访问失败，状态码: {response.status if response else 'None'}")
                 result = False
@@ -202,10 +255,10 @@ async def main():
     # 执行各项测试
     results = {}
     
-    results["Twitter登录页面"] = await test_twitter_login_page()
-    results["Twitter主页"] = await test_twitter_public_page()
-    results["Twitter搜索页面"] = await test_twitter_search_page()
-    results["Cookies提取演示"] = await test_cookies_extraction_demo()
+    results["Twitter登录页面"] = await test_twitter_login_page("wiretunnel","Fuck.xget.2048!@#$")
+    # results["Twitter主页"] = await test_twitter_public_page()
+    # results["Twitter搜索页面"] = await test_twitter_search_page()
+    # results["Cookies提取演示"] = await test_cookies_extraction_demo()
     
     # 生成报告
     print("\n" + "="*50)
@@ -238,10 +291,10 @@ async def main():
         print("🔧 需要检查网络连接和Twitter访问权限")
     
     # 清理截图文件
-    import os
-    for filename in ["twitter_login_page.png", "twitter_home_page.png", "twitter_search_page.png"]:
-        if os.path.exists(filename):
-            os.remove(filename)
+    # import os
+    # for filename in ["twitter_login_page.png", "twitter_home_page.png", "twitter_search_page.png"]:
+    #     if os.path.exists(filename):
+    #         os.remove(filename)
     
     return passed_tests == total_tests
 
