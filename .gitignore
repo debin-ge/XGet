@@ -5,6 +5,7 @@ generated/
 
 # 敏感数据文件
 accounts.txt
+proxy.txt
 accounts.db
 cookies.json
 XGet_verified.md
