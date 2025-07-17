@@ -123,14 +123,14 @@ async def playwright_login_with_google(account: Dict, google_account: Dict, prox
         async with page.expect_popup() as popup_info:
             await google_btn.click()
         popup = await popup_info.value
+        await popup.wait_for_load_state('domcontentloaded')
 
         try:
-            
-            email_input = await popup.query_selector('input[type="email"]')
+            email_input = await popup.wait_for_selector('input[type="email"]:not([aria-hidden="true"])', timeout=5000)
             if not email_input:
-                email_input = await popup.query_selector('input[name="identifier"]')
+                email_input = await popup.wait_for_selector('input[name="identifier"]', timeout=5000)
             if not email_input:
-                email_input = await popup.query_selector('#identifierId')
+                email_input = await popup.wait_for_selector('#identifierId', timeout=5000)
             if not email_input:
                 print("❌ 未找到 email 输入框")
                 await popup.screenshot(path="not_find_email_pagqqe.png")
@@ -152,6 +152,7 @@ async def playwright_login_with_google(account: Dict, google_account: Dict, prox
                 else:
                     raise
             await popup.fill('input[type="password"]:not([aria-hidden="true"])', google_account["email_password"])
+            print("成功输入密码")
             await popup.click('#passwordNext button')
             await popup.wait_for_close(timeout=30000)
         except Exception as e:
