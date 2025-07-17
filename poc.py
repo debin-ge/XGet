@@ -126,11 +126,20 @@ async def playwright_login_with_google(account: Dict, google_account: Dict, prox
         await popup.wait_for_load_state('domcontentloaded')
 
         try:
-            email_input = await popup.wait_for_selector('input[type="email"]:not([aria-hidden="true"])', timeout=5000)
-            if not email_input:
-                email_input = await popup.wait_for_selector('input[name="identifier"]', timeout=5000)
-            if not email_input:
-                email_input = await popup.wait_for_selector('#identifierId', timeout=5000)
+            selectors = [
+                'input[type="email"]',
+                'input[name="identifier"]',
+                '#identifierId'
+            ]
+            email_input = None
+            for selector in selectors:
+                try:
+                    email_input = await popup.wait_for_selector(selector, timeout=5000)
+                    if email_input:
+                        break
+                except Exception:
+                    continue
+            
             if not email_input:
                 print("❌ 未找到 email 输入框")
                 await popup.screenshot(path="not_find_email_pagqqe.png")
@@ -142,17 +151,28 @@ async def playwright_login_with_google(account: Dict, google_account: Dict, prox
 
             await popup.click('#identifierNext button', timeout=20000)
             await popup.wait_for_timeout(5000)
-            # 优化：等待可见密码输入框或弹窗关闭
-            try:
-                await popup.wait_for_selector('input[type="password"]:not([aria-hidden="true"])', timeout=15000, state='visible')
-            except Exception:
-                if popup.is_closed():
-                    print("⚠️ Google弹窗已关闭，可能账号异常或被风控")
-                    return {}
-                else:
-                    raise
-            await popup.fill('input[type="password"]:not([aria-hidden="true"])', google_account["email_password"])
+                        
+            password_selectors = [
+                'input[type="password"]',
+                'input[name="Passwd"]'
+            ]
+            password_input = None
+            for selector in password_selectors:
+                try:
+                    password_input = await popup.wait_for_selector(selector, timeout=5000)
+                    if password_input:
+                        break
+                except Exception:
+                    continue
+
+            if not password_input:
+                print("❌ 未找到 password 输入框")
+                await popup.screenshot(path="not_find_password_pagqqe.png")
+                return {}
+
+            await password_input.fill(google_account["email_password"])
             print("成功输入密码")
+
             await popup.click('#passwordNext button')
             await popup.wait_for_close(timeout=30000)
         except Exception as e:
@@ -367,3 +387,11 @@ if __name__ == "__main__":
         print("\n\n⚠️  操作中断")
     except Exception as e:
         print(f"\n❌ 发生错误: {e}")
+    finally:
+        # 兼容性处理，防止 event loop 已关闭时的警告
+        try:
+            loop = asyncio.get_event_loop()
+            if not loop.is_closed():
+                loop.close()
+        except Exception:
+            pass
