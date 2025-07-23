@@ -38,72 +38,9 @@ XGet微服务系统由以下核心服务组成：
 
 1. 克隆仓库
    ```bash
-   git clone https://github.com/yourusername/xget.git
+   git clone https://github.com/debin-ge/XGet.git
    cd xget
    ```
-
-2. 初始化目录结构（如果需要）
-   ```bash
-   bash setup_directories.sh
-   ```
-
-3. 启动服务
-   ```bash
-   bash start.sh
-   ```
-
-4. 访问服务
-   - API网关：http://localhost:8000
-   - API文档：http://localhost:8000/api/v1/docs
-   - Grafana监控：http://localhost:3000（默认用户名/密码：admin/admin）
-   - Prometheus：http://localhost:9090
-
-### 使用示例
-
-#### 1. 创建账号
-
-```bash
-curl -X POST http://localhost:8000/api/v1/accounts \
-  -H "Content-Type: application/json" \
-  -H "Authorization: Bearer YOUR_TOKEN" \
-  -d '{
-    "username": "twitter_user",
-    "password": "secure_password",
-    "email": "user@example.com"
-  }'
-```
-
-#### 2. 添加代理
-
-```bash
-curl -X POST http://localhost:8000/api/v1/proxies \
-  -H "Content-Type: application/json" \
-  -H "Authorization: Bearer YOUR_TOKEN" \
-  -d '{
-    "host": "proxy.example.com",
-    "port": 8080,
-    "protocol": "http",
-    "username": "proxy_user",
-    "password": "proxy_pass"
-  }'
-```
-
-#### 3. 创建采集任务
-
-```bash
-curl -X POST http://localhost:8000/api/v1/scrapers/tasks \
-  -H "Content-Type: application/json" \
-  -H "Authorization: Bearer YOUR_TOKEN" \
-  -d '{
-    "task_type": "USER_TWEETS",
-    "parameters": {
-      "username": "elonmusk",
-      "limit": 100
-    },
-    "priority": "high",
-    "schedule": "once"
-  }'
-```
 
 ## 项目结构
 
@@ -131,8 +68,6 @@ xget/
 ## 文档
 
 - [架构设计文档](./docs/XGet_Architecture.md)
-- [实施指南](./docs/XGet_Implementation_Guide.md)
-- [API参考文档](./docs/XGet_API_Reference.md)
 
 ## 贡献指南
 
