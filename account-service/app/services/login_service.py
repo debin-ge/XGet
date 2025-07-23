@@ -1,6 +1,8 @@
 from playwright.async_api import async_playwright
 from typing import Dict, Optional
+import logging
 
+logger = logging.getLogger(__name__)
 
 class LoginService:
     async def login_with_twitter(self, account: Dict, proxy: Dict) -> Dict:
@@ -57,17 +59,17 @@ class LoginService:
                 if not password_input:
                     return {}
                 await password_input.fill(account["password"])
-                
+                                
                 # 点击登录
                 login_btn = await page.query_selector('button[data-testid="LoginForm_Login_Button"]')
                 if not login_btn:
                     return {}
                 await login_btn.click()
                 await page.wait_for_timeout(10000)
-                
+                                
                 # 等待跳转到主页
                 await page.wait_for_url("https://x.com/home", timeout=15000)
-                
+                                
                 # 获取cookies
                 cookies = await context.cookies()
                 cookies_dict = {c['name']: c['value'] for c in cookies}
@@ -88,7 +90,7 @@ class LoginService:
             device = playwright.devices["Desktop Chrome"]
             
             browser = await playwright.chromium.launch(
-                headless=False,
+                headless=True,
                 args=[
                     '--disable-blink-features=AutomationControlled',
                     '--no-sandbox', 
@@ -105,11 +107,11 @@ class LoginService:
             
             context = await browser.new_context(
                 **device,
-                proxy={
-                    "server": proxy_server,
-                    "username": proxy["username"],
-                    "password": proxy["password"]
-                }
+                # proxy={
+                #     "server": proxy_server,
+                #     "username": proxy["username"],
+                #     "password": proxy["password"]
+                # }
             )
             
             page = await context.new_page()
@@ -122,15 +124,18 @@ class LoginService:
                 # 查找Google登录iframe
                 iframe_element = await page.query_selector('iframe[title*="Google"]')
                 if not iframe_element:
+                    logger.error(f"未找到Google登录iframe")
                     return {}
 
                 google_frame = await iframe_element.content_frame()
                 if not google_frame:
+                    logger.error(f"未找到Google登录iframe")
                     return {}
 
                 # 查找Google登录按钮
                 google_btn = await google_frame.query_selector('div[role="button"], button')
                 if not google_btn:
+                    logger.error(f"未找到Google登录按钮")
                     return {}
 
                 # 点击Google登录，获取弹窗
@@ -154,13 +159,14 @@ class LoginService:
                     except Exception:
                         continue
                 if not email_input:
+                    logger.error(f"未找到邮箱输入框")
                     return {}
 
                 await email_input.fill(google_account["email"])
 
                 # 点击"下一步"
                 await popup.click('#identifierNext button', timeout=5000)
-                await popup.wait_for_timeout(2000)
+                await popup.wait_for_timeout(5000)
 
                 # 填写密码
                 password_selectors = [
@@ -177,6 +183,7 @@ class LoginService:
                     except Exception:
                         continue
                 if not password_input:
+                    logger.error(f"未找到密码输入框")
                     return {}
 
                 await password_input.fill(google_account["email_password"])

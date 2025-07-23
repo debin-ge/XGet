@@ -69,6 +69,12 @@ class AccountService:
         await self.db.commit()
         return result.rowcount > 0
         
+    def _truncate_error_msg(self, error_msg: str, max_length: int = 500) -> str:
+        """Truncate error message to specified length to prevent database errors"""
+        if error_msg and len(error_msg) > max_length:
+            return error_msg[:max_length-3] + "..."
+        return error_msg
+        
     async def record_login_history(
         self, 
         account_id: str, 
@@ -80,11 +86,10 @@ class AccountService:
     ) -> LoginHistory:
         """记录登录历史"""
         login_history = LoginHistory(
-            id=str(uuid.uuid4()),
             account_id=account_id,
             proxy_id=proxy_id,
             status=status,
-            error_msg=error_msg,
+            error_msg=self._truncate_error_msg(error_msg) if error_msg else None,
             cookies_count=cookies_count,
             response_time=response_time
         )
@@ -94,47 +99,37 @@ class AccountService:
         return login_history
 
     async def login_account(self, account_id: str, proxy_id: Optional[str] = None) -> Optional[Account]:
-        """
-        登录账号，使用LoginService进行实际登录
+        """登录账号并获取cookies"""
+        start_time = time.time()
         
-        Args:
-            account_id: 账号ID
-            proxy_id: 代理ID，如果为None则获取一个可用代理
-            
-        Returns:
-            登录后的账号信息
-        """
         # 获取账号信息
         account = await self.get_account(account_id)
         if not account:
-            logger.error(f"账号不存在: {account_id}")
             return None
-        
-        # 获取代理信息
-        proxy = None
-        if proxy_id:
-            proxy = await self.proxy_client.get_proxy(proxy_id)
-        else:
-            proxy = await self.proxy_client.get_available_proxy()
-        
-        if not proxy:
-            logger.error("无可用代理，登录失败")
-            account.error_msg = "无可用代理，登录失败"
-            await self.db.commit()
             
-            # 记录登录历史
-            await self.record_login_history(
-                account_id=account_id,
-                proxy_id=None,
-                status="FAILED",
-                error_msg="无可用代理，登录失败"
-            )
-            
-            return account
-        
-        start_time = time.time()
         try:
-            # 准备账号和代理信息
+            # 获取代理信息
+            if proxy_id:
+                proxy = await self.proxy_client.get_proxy(proxy_id)
+            else:
+                proxy = await self.proxy_client.get_available_proxy()
+                
+            if not proxy:
+                account.error_msg = self._truncate_error_msg("无法获取可用代理")
+                await self.db.commit()
+                
+                # 记录登录历史
+                await self.record_login_history(
+                    account_id=account_id,
+                    proxy_id=None,
+                    status="FAILED",
+                    error_msg="无法获取可用代理",
+                    response_time=int((time.time() - start_time) * 1000)
+                )
+                
+                return account
+                
+            # 准备账号信息
             account_dict = {
                 "username": account.username,
                 "password": account.password,
@@ -163,8 +158,9 @@ class AccountService:
                 }
                 cookies_dict = await self.login_service.login_with_google(account_dict, google_account, proxy_dict)
             else:
-                logger.error(f"不支持的登录方法: {account.login_method}")
-                account.error_msg = f"不支持的登录方法: {account.login_method}"
+                error_msg = f"不支持的登录方法: {account.login_method}"
+                logger.error(error_msg)
+                account.error_msg = self._truncate_error_msg(error_msg)
                 await self.db.commit()
                 
                 # 记录登录历史
@@ -172,7 +168,7 @@ class AccountService:
                     account_id=account_id,
                     proxy_id=proxy.get("id"),
                     status="FAILED",
-                    error_msg=f"不支持的登录方法: {account.login_method}",
+                    error_msg=error_msg,
                     response_time=int((time.time() - start_time) * 1000)
                 )
                 
@@ -199,16 +195,17 @@ class AccountService:
                     response_time=response_time
                 )
             else:
-                logger.error(f"账号 {account.username} 登录失败，未获取到cookies")
+                error_msg = "登录失败，未获取到cookies"
+                logger.error(f"账号 {account.username} {error_msg}")
                 account.active = False
-                account.error_msg = "登录失败，未获取到cookies"
+                account.error_msg = self._truncate_error_msg(error_msg)
                 
                 # 记录登录历史
                 await self.record_login_history(
                     account_id=account_id,
                     proxy_id=proxy.get("id"),
                     status="FAILED",
-                    error_msg="登录失败，未获取到cookies",
+                    error_msg=error_msg,
                     response_time=response_time
                 )
             
@@ -220,9 +217,10 @@ class AccountService:
             # 计算响应时间（毫秒）
             response_time = int((time.time() - start_time) * 1000)
             
-            logger.exception(f"登录过程中发生异常: {str(e)}")
+            error_msg = f"登录异常: {str(e)}"
+            logger.exception(error_msg)
             account.active = False
-            account.error_msg = f"登录异常: {str(e)}"
+            account.error_msg = self._truncate_error_msg(error_msg)
             await self.db.commit()
             
             # 记录登录历史
@@ -230,7 +228,7 @@ class AccountService:
                 account_id=account_id,
                 proxy_id=proxy.get("id") if proxy else None,
                 status="FAILED",
-                error_msg=f"登录异常: {str(e)}",
+                error_msg=error_msg,
                 response_time=response_time
             )
             

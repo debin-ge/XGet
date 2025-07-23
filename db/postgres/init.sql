@@ -11,19 +11,20 @@ CREATE DATABASE storage_db;
 -- 创建账户表
 CREATE TABLE accounts (
     id VARCHAR(36) PRIMARY KEY,
-    username VARCHAR(255) NOT NULL,
+    username VARCHAR(255) NOT NULL UNIQUE,
+    password VARCHAR(255),
     email VARCHAR(255),
     email_password VARCHAR(255),
     login_method VARCHAR(50),
-    password VARCHAR(255),
+    proxy_id VARCHAR(36),
     cookies JSONB,
     headers JSONB,
     user_agent VARCHAR(500),
-    active BOOLEAN DEFAULT true,
-    last_login TIMESTAMP,
+    active BOOLEAN DEFAULT FALSE,
+    last_used TIMESTAMP,
+    error_msg VARCHAR(500),
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    error_msg VARCHAR(500)
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
 -- 创建登录历史表
@@ -44,39 +45,18 @@ CREATE TABLE login_history (
 -- 创建代理表
 CREATE TABLE proxies (
     id VARCHAR(36) PRIMARY KEY,
+    type VARCHAR(50),
     ip VARCHAR(255) NOT NULL,
     port INTEGER NOT NULL,
     username VARCHAR(255),
     password VARCHAR(255),
-    type VARCHAR(50),
-    location VARCHAR(255),
-    active BOOLEAN DEFAULT true,
+    country VARCHAR(255),
+    city VARCHAR(255),
+    isp VARCHAR(255),
+    latency INTEGER,
+    success_rate FLOAT DEFAULT 0.0,
     last_check TIMESTAMP,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-);
-
--- 创建代理检查表
-CREATE TABLE proxy_checks (
-    id VARCHAR(36) PRIMARY KEY,
-    proxy_id VARCHAR(36) REFERENCES proxies(id),
-    check_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    status VARCHAR(50),
-    response_time INTEGER,
-    error_message VARCHAR(500)
-);
-
--- 创建代理源表
-CREATE TABLE proxy_sources (
-    id VARCHAR(36) PRIMARY KEY,
-    name VARCHAR(255) NOT NULL,
-    url VARCHAR(500),
-    auth_required BOOLEAN DEFAULT false,
-    auth_username VARCHAR(255),
-    auth_password VARCHAR(255),
-    active BOOLEAN DEFAULT true,
-    last_fetch TIMESTAMP,
-    fetch_interval INTEGER DEFAULT 3600,
+    status VARCHAR(50) DEFAULT 'INACTIVE',
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
@@ -87,31 +67,18 @@ CREATE TABLE proxy_sources (
 -- 创建任务表
 CREATE TABLE tasks (
     id VARCHAR(36) PRIMARY KEY,
-    name VARCHAR(255) NOT NULL,
     task_type VARCHAR(50) NOT NULL,
-    parameters JSONB,
-    status VARCHAR(50) DEFAULT 'pending',
-    priority INTEGER DEFAULT 1,
+    parameters JSONB NOT NULL,
     account_id VARCHAR(36),
     proxy_id VARCHAR(36),
-    schedule JSONB,
+    status VARCHAR(50) DEFAULT 'PENDING',
+    progress FLOAT DEFAULT 0.0,
     result_count INTEGER DEFAULT 0,
-    progress FLOAT DEFAULT 0,
     error_message VARCHAR(500),
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     started_at TIMESTAMP,
     completed_at TIMESTAMP
-);
-
--- 创建结果表
-CREATE TABLE results (
-    id VARCHAR(36) PRIMARY KEY,
-    task_id VARCHAR(36) REFERENCES tasks(id),
-    data_type VARCHAR(50),
-    data JSONB,
-    metadata JSONB,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
 -- 创建任务执行表
@@ -120,14 +87,11 @@ CREATE TABLE task_executions (
     task_id VARCHAR(36) REFERENCES tasks(id),
     account_id VARCHAR(36),
     proxy_id VARCHAR(36),
-    status VARCHAR(50) DEFAULT 'pending',
-    progress FLOAT DEFAULT 0,
-    result_count INTEGER DEFAULT 0,
-    error_message VARCHAR(500),
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    status VARCHAR(50),
     started_at TIMESTAMP,
-    completed_at TIMESTAMP
+    completed_at TIMESTAMP,
+    duration INTEGER,
+    error_message VARCHAR(500)
 );
 
 -- 切换到处理服务数据库
@@ -141,7 +105,7 @@ CREATE TABLE processing_tasks (
     parameters JSONB,
     status VARCHAR(50) DEFAULT 'pending',
     priority VARCHAR(50) DEFAULT 'normal',
-    progress FLOAT DEFAULT 0,
+    progress FLOAT DEFAULT 0.0,
     error_message VARCHAR(500),
     result_id VARCHAR(36),
     callback_url VARCHAR(500),
@@ -158,7 +122,7 @@ CREATE TABLE processing_rules (
     description TEXT,
     task_type VARCHAR(50) NOT NULL,
     rule_definition JSONB NOT NULL,
-    is_active BOOLEAN DEFAULT true,
+    is_active BOOLEAN DEFAULT TRUE,
     version INTEGER DEFAULT 1,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
@@ -167,7 +131,7 @@ CREATE TABLE processing_rules (
 -- 创建处理结果表
 CREATE TABLE processing_results (
     id VARCHAR(36) PRIMARY KEY,
-    task_id VARCHAR(36) REFERENCES processing_tasks(id),
+    task_id VARCHAR(36) REFERENCES processing_tasks(id) NOT NULL,
     data JSONB,
     metadata JSONB,
     storage_location VARCHAR(500),
@@ -185,8 +149,8 @@ CREATE TABLE storage_items (
     size INTEGER,
     storage_location VARCHAR(500) NOT NULL,
     storage_backend VARCHAR(50) NOT NULL,
-    compression BOOLEAN DEFAULT false,
-    encryption BOOLEAN DEFAULT false,
+    compression BOOLEAN DEFAULT FALSE,
+    encryption BOOLEAN DEFAULT FALSE,
     version INTEGER DEFAULT 1,
     status VARCHAR(50) DEFAULT 'stored',
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -211,7 +175,7 @@ CREATE TABLE metadata (
 -- 创建存储后端表
 CREATE TABLE storage_backends (
     id VARCHAR(36) PRIMARY KEY,
-    name VARCHAR(255) NOT NULL,
+    name VARCHAR(255) NOT NULL UNIQUE,
     type VARCHAR(50) NOT NULL,
     configuration JSONB NOT NULL,
     status VARCHAR(50) DEFAULT 'active',
@@ -225,12 +189,12 @@ CREATE TABLE storage_backends (
 -- 创建保留策略表
 CREATE TABLE retention_policies (
     id VARCHAR(36) PRIMARY KEY,
-    name VARCHAR(255) NOT NULL,
+    name VARCHAR(255) NOT NULL UNIQUE,
     description TEXT,
     active_period INTEGER NOT NULL,
     archive_period INTEGER NOT NULL,
     total_retention INTEGER NOT NULL,
-    auto_delete BOOLEAN DEFAULT false,
+    auto_delete BOOLEAN DEFAULT FALSE,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 ); 
