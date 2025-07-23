@@ -1,0 +1,84 @@
+# 敏感数据文件
+accounts.txt
+proxy.txt
+accounts.db
+cookies.json
+*.cookies
+*.session
+*.auth
+*.token
+
+# 尚未实现的服务
+/auth-service/
+/user-service/
+/analytics-service/
+/monitoring-service/
+/shared/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+.venv/
+venv/
+venv_py312/
+env/
+ENV/
+
+# 环境变量和密钥
+.env
+.env.local
+.env.dev
+.env.prod
+secrets/
+*.key
+*.pem
+
+# 数据和日志
+data/
+logs/
+*.log
+
+# IDE和编辑器
+.vscode/
+.idea/
+*.swp
+*.swo
+*.sublime-*
+.project
+.pydevproject
+.settings/
+
+# 临时文件
+*.tmp
+*.bak
+.DS_Store
+Thumbs.db
+.cache/
+
+# 文档生成
+_build/
+_static/
+_templates/
+
+
+# 架构分析文档和图片（可选择是否忽略）
+/images/
+/docs/
