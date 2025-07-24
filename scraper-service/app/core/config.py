@@ -16,12 +16,13 @@ class Settings(BaseSettings):
     
     MONGODB_URL: str = os.getenv("MONGODB_URL", "mongodb://mongodb:27017/scraper_db")
     
-    ACCOUNT_SERVICE_URL: str = "http://account-service:8000/api/v1"
-    PROXY_SERVICE_URL: str = "http://proxy-service:8000/api/v1"
+    ACCOUNT_SERVICE_URL: str = os.getenv("ACCOUNT_SERVICE_URL", "http://account-service:8000")
+    PROXY_SERVICE_URL: str = os.getenv("PROXY_SERVICE_URL", "http://proxy-service:8000")
     
-    KAFKA_BOOTSTRAP_SERVERS: str = "kafka:9092"
-    KAFKA_TOPIC_TASKS: str = "scraper-tasks"
-    KAFKA_TOPIC_RESULTS: str = "scraper-results"
+    KAFKA_BOOTSTRAP_SERVERS: str = os.getenv("KAFKA_BOOTSTRAP_SERVERS", "kafka:9092")
+    KAFKA_TOPIC_TASKS: str = os.getenv("KAFKA_TOPIC_TASKS", "scraper-tasks")
+    KAFKA_TOPIC_RESULTS: str = os.getenv("KAFKA_TOPIC_RESULTS", "scraper-results")
+    KAFKA_TOPIC_CONTROL: str = os.getenv("KAFKA_TOPIC_CONTROL", "scraper-control")
     
     MAX_CONCURRENT_TASKS: int = 5
     

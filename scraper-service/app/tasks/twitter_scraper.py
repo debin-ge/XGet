@@ -14,7 +14,7 @@ class TwitterScraper:
         self.api = API()
         self.account = None
 
-    async def setup(self) -> bool:
+    async def setup(self) -> bool: 
         """设置Twitter API"""
         try:
             # 创建账号对象
@@ -45,12 +45,7 @@ class TwitterScraper:
             )
             
             # 添加账号到API
-            await self.api.pool.add_account(self.account)
-            
-            # 检查账号是否可用
-            accounts = await self.api.pool.get_accounts()
-            if not accounts:
-                return False
+            await self.api.pool.save(self.account)
                 
             return True
         except Exception as e:
@@ -116,6 +111,41 @@ class TwitterScraper:
             
         return results
 
+    async def get_user_tweets_stream(
+        self, 
+        username: str, 
+        limit: int = 100, 
+        include_replies: bool = False, 
+        include_retweets: bool = False
+    ):
+        """获取用户推文（流式）"""
+        count = 0
+        try:
+            async for tweet in self.api.user_tweets(username):
+                # 过滤回复和转发
+                if not include_replies and tweet.in_reply_to_status_id:
+                    continue
+                if not include_retweets and tweet.retweeted_status_id:
+                    continue
+                    
+                result = ResultCreate(
+                    task_id="",  # 由调用者设置
+                    data_type=RESULT_TYPE_TWEET,
+                    data=tweet.dict(),
+                    metadata={
+                        "source": "twitter",
+                        "username": username,
+                        "tweet_id": tweet.id
+                    }
+                )
+                yield result
+                
+                count += 1
+                if count >= limit:
+                    break
+        except Exception as e:
+            print(f"获取用户推文失败: {e}")
+
     async def search_tweets(self, query: str, limit: int = 100) -> List[ResultCreate]:
         """搜索推文"""
         results = []
@@ -142,6 +172,24 @@ class TwitterScraper:
             print(f"搜索推文失败: {e}")
             
         return results
+
+    async def search_tweets_stream(self, query: str, limit: int = 100):
+        """搜索推文（流式）"""
+        try:
+            async for tweet in self.api.search(query,limit):
+                result = ResultCreate(
+                    task_id="",  # 由调用者设置
+                    data_type=RESULT_TYPE_TWEET,
+                    data=tweet.dict(),
+                    metadata={
+                        "source": "twitter",
+                        "query": query,
+                        "tweet_id": tweet.id
+                    }
+                )
+                yield result
+        except Exception as e:
+            print(f"搜索推文失败: {e}")
 
     async def get_followers(self, username: str, limit: int = 100) -> List[ResultCreate]:
         """获取用户粉丝"""
@@ -170,12 +218,36 @@ class TwitterScraper:
             
         return results
 
+    async def get_followers_stream(self, username: str, limit: int = 100):
+        """获取用户粉丝（流式）"""
+        count = 0
+        try:
+            async for follower in self.api.followers(username):
+                result = ResultCreate(
+                    task_id="",  # 由调用者设置
+                    data_type=RESULT_TYPE_FOLLOWER,
+                    data=follower.dict(),
+                    metadata={
+                        "source": "twitter",
+                        "target_username": username,
+                        "follower_username": follower.screen_name
+                    }
+                )
+                yield result
+                
+                count += 1
+                if count >= limit:
+                    break
+        except Exception as e:
+            print(f"获取用户粉丝失败: {e}")
+
     async def get_topic_tweets(self, topic: str, limit: int = 100) -> List[ResultCreate]:
         """获取话题相关推文"""
         # 话题搜索实际上就是搜索带有特定话题标签的推文
         return await self.search_tweets(f"#{topic}", limit)
 
-    async def close(self):
-        """关闭Twitter API"""
-        if self.api:
-            await self.api.pool.close()
+    async def get_topic_tweets_stream(self, topic: str, limit: int = 100):
+        """获取话题相关推文（流式）"""
+        # 话题搜索实际上就是搜索带有特定话题标签的推文
+        async for result in self.search_tweets_stream(f"#{topic}", limit):
+            yield result

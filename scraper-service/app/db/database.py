@@ -27,3 +27,8 @@ async def get_db() -> AsyncSession:
             yield session
         finally:
             await session.close()
+
+# 直接获取数据库会话的函数，用于非依赖注入场景
+async def async_session() -> AsyncSession:
+    session = SessionLocal()
+    return session

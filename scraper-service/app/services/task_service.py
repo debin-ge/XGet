@@ -8,9 +8,8 @@ import uuid
 from datetime import datetime
 import httpx
 import json
-import asyncio
 from ..core.config import settings
-
+from aiokafka import AIOKafkaProducer, AIOKafkaConsumer
 
 class TaskService:
     def __init__(self, db: AsyncSession):
@@ -34,7 +33,6 @@ class TaskService:
         
         # 发送任务到Kafka
         try:
-            from aiokafka import AIOKafkaProducer
             producer = AIOKafkaProducer(
                 bootstrap_servers=settings.KAFKA_BOOTSTRAP_SERVERS,
                 value_serializer=lambda v: json.dumps(v).encode('utf-8')
@@ -126,10 +124,41 @@ class TaskService:
             return task
             
         # 更新任务状态
-        return await self.update_task(
+        updated_task = await self.update_task(
             task_id, 
             TaskUpdate(status="RUNNING", progress=0.0)
         )
+        
+        # 将任务发送到Kafka队列
+        try:
+            producer = AIOKafkaProducer(
+                bootstrap_servers=settings.KAFKA_BOOTSTRAP_SERVERS,
+                value_serializer=lambda v: json.dumps(v).encode('utf-8')
+            )
+            await producer.start()
+            try:
+                await producer.send_and_wait(
+                    settings.KAFKA_TOPIC_TASKS,
+                    {
+                        "task_id": task.id,
+                        "task_type": task.task_type,
+                        "parameters": task.parameters,
+                        "account_id": task.account_id,
+                        "proxy_id": task.proxy_id
+                    }
+                )
+                print(f"任务 {task_id} 已发送到Kafka队列")
+            finally:
+                await producer.stop()
+        except Exception as e:
+            print(f"发送任务到Kafka失败: {e}")
+            # 如果发送失败，更新任务状态
+            await self.update_task(
+                task_id,
+                TaskUpdate(status="FAILED", error_message=f"发送任务到队列失败: {str(e)}")
+            )
+            
+        return updated_task
 
     async def stop_task(self, task_id: str) -> Optional[Task]:
         """停止任务"""
@@ -141,6 +170,34 @@ class TaskService:
             return task
             
         # 更新任务状态
+        updated_task = await self.update_task(
+            task_id, 
+            TaskUpdate(status="STOPPING")
+        )
+        
+        # 发送停止任务的控制消息到Kafka
+        try:
+            producer = AIOKafkaProducer(
+                bootstrap_servers=settings.KAFKA_BOOTSTRAP_SERVERS,
+                value_serializer=lambda v: json.dumps(v).encode('utf-8')
+            )
+            await producer.start()
+            try:
+                await producer.send_and_wait(
+                    settings.KAFKA_TOPIC_CONTROL,
+                    {
+                        "action": "STOP_TASK",
+                        "task_id": task_id
+                    }
+                )
+                print(f"停止任务 {task_id} 的控制消息已发送到Kafka队列")
+            finally:
+                await producer.stop()
+        except Exception as e:
+            print(f"发送停止任务控制消息失败: {e}")
+            
+        # 无论消息是否发送成功，都将状态更新为已停止
+        # 因为worker可能已经完成或者失败，或者根本没有收到任务
         return await self.update_task(
             task_id, 
             TaskUpdate(status="STOPPED")
@@ -151,7 +208,7 @@ class TaskService:
         async with httpx.AsyncClient() as client:
             try:
                 response = await client.get(
-                    f"{settings.ACCOUNT_SERVICE_URL}/accounts/{account_id}"
+                    f"{settings.ACCOUNT_SERVICE_URL}{settings.API_V1_STR}/accounts/{account_id}"
                 )
                 if response.status_code == 200:
                     return response.json()
