@@ -17,7 +17,11 @@ class Settings(BaseSettings):
     
     # 微服务地址
     PROXY_SERVICE_URL: str = os.getenv("PROXY_SERVICE_URL", "http://proxy-service:8000")
-    
+
+    # 日志
+    LOG_LEVEL: str = os.getenv("LOG_LEVEL", "INFO")
+    LOG_DIR: Optional[str] = os.getenv("LOG_DIR")
+
     @property
     def get_database_url(self) -> str:
         if self.SQLALCHEMY_DATABASE_URI:

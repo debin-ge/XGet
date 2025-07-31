@@ -1,8 +1,7 @@
 from playwright.async_api import async_playwright
 from typing import Dict, Optional
-import logging
+from ..core.logging import logger
 
-logger = logging.getLogger(__name__)
 
 class LoginService:
     async def login_with_twitter(self, account: Dict, proxy: Dict) -> Dict:
@@ -75,7 +74,7 @@ class LoginService:
                 cookies_dict = {c['name']: c['value'] for c in cookies}
                 
             except Exception as e:
-                print(f"登录失败: {e}")
+                logger.error(f"登录失败: {e}")
             finally:
                 await browser.close()
                 
@@ -107,11 +106,11 @@ class LoginService:
             
             context = await browser.new_context(
                 **device,
-                # proxy={
-                #     "server": proxy_server,
-                #     "username": proxy["username"],
-                #     "password": proxy["password"]
-                # }
+                proxy={
+                    "server": proxy_server,
+                    "username": proxy["username"],
+                    "password": proxy["password"]
+                }
             )
             
             page = await context.new_page()
@@ -206,7 +205,7 @@ class LoginService:
                 cookies_dict = {c['name']: c['value'] for c in cookies}
 
             except Exception as e:
-                print(f"Google登录流程异常: {e}")
+                logger.error(f"Google登录流程异常: {e}")
             finally:
                 await browser.close()
 

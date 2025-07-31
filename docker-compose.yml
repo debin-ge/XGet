@@ -86,7 +86,7 @@ services:
       - "8003:8000"
     environment:
       - DEBUG=true
-      - LOG_LEVEL=DEBUG
+      - LOG_LEVEL=INFO
       # 添加PostgreSQL数据库配置
       - POSTGRES_SERVER=postgres
       - POSTGRES_USER=postgres
@@ -257,6 +257,19 @@ services:
       - xget-network
     restart: unless-stopped
 
+  # Kafka可视化工具kafdrop
+  kafdrop:
+    image: obsidiandynamics/kafdrop:latest
+    ports:
+      - "9000:9000"
+    environment:
+      - KAFKA_BROKERCONNECT=kafka:9092
+    volumes:
+      - kafdrop-data:/tmp/kafdrop
+    networks:
+      - xget-network
+    restart: unless-stopped
+
   # MinIO对象存储
   # minio:
   #   image: minio/minio
@@ -323,6 +336,7 @@ volumes:
   mongodb-data:
   redis-data:
   kafka-data:
+  kafdrop-data:
   # minio-data:
   # elasticsearch-data:
   # prometheus-data:

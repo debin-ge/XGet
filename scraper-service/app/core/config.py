@@ -24,6 +24,10 @@ class Settings(BaseSettings):
     KAFKA_TOPIC_RESULTS: str = os.getenv("KAFKA_TOPIC_RESULTS", "scraper-results")
     KAFKA_TOPIC_CONTROL: str = os.getenv("KAFKA_TOPIC_CONTROL", "scraper-control")
     
+    # 日志配置
+    LOG_LEVEL: str = os.getenv("LOG_LEVEL", "INFO")
+    LOG_DIR: Optional[str] = os.getenv("LOG_DIR")
+    
     MAX_CONCURRENT_TASKS: int = 5
     
     @property

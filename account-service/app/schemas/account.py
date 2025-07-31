@@ -31,6 +31,9 @@ class AccountResponse(AccountBase):
     created_at: datetime
     updated_at: Optional[datetime] = None
     error_msg: Optional[str] = None
+    cookies: Optional[Dict] = None
+    headers: Optional[Dict] = None
+    user_agent: Optional[str] = None
 
     class Config:
         from_attributes = True

@@ -10,6 +10,7 @@ import httpx
 import json
 from ..core.config import settings
 from aiokafka import AIOKafkaProducer, AIOKafkaConsumer
+from ..core.logging import logger
 
 class TaskService:
     def __init__(self, db: AsyncSession):
@@ -52,7 +53,7 @@ class TaskService:
             finally:
                 await producer.stop()
         except Exception as e:
-            print(f"发送任务到Kafka失败: {e}")
+            logger.error(f"发送任务到Kafka失败: {e}")
             # 如果发送失败，更新任务状态
             task.status = "FAILED"
             task.error_message = f"发送任务到队列失败: {str(e)}"
@@ -147,11 +148,11 @@ class TaskService:
                         "proxy_id": task.proxy_id
                     }
                 )
-                print(f"任务 {task_id} 已发送到Kafka队列")
+                logger.info(f"任务 {task_id} 已发送到Kafka队列")
             finally:
                 await producer.stop()
         except Exception as e:
-            print(f"发送任务到Kafka失败: {e}")
+            logger.error(f"发送任务到Kafka失败: {e}")
             # 如果发送失败，更新任务状态
             await self.update_task(
                 task_id,
@@ -190,11 +191,11 @@ class TaskService:
                         "task_id": task_id
                     }
                 )
-                print(f"停止任务 {task_id} 的控制消息已发送到Kafka队列")
+                logger.info(f"停止任务 {task_id} 的控制消息已发送到Kafka队列")
             finally:
                 await producer.stop()
         except Exception as e:
-            print(f"发送停止任务控制消息失败: {e}")
+            logger.error(f"发送停止任务控制消息失败: {e}")
             
         # 无论消息是否发送成功，都将状态更新为已停止
         # 因为worker可能已经完成或者失败，或者根本没有收到任务
@@ -213,7 +214,7 @@ class TaskService:
                 if response.status_code == 200:
                     return response.json()
             except Exception as e:
-                print(f"获取账号信息失败: {e}")
+                logger.error(f"获取账号信息失败: {e}")
         return None
 
     async def get_proxy_info(self, proxy_id: str) -> Optional[Dict]:
@@ -229,5 +230,5 @@ class TaskService:
                 if response.status_code == 200:
                     return response.json()
             except Exception as e:
-                print(f"获取代理信息失败: {e}")
+                logger.error(f"获取代理信息失败: {e}")
         return None

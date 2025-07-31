@@ -1,12 +1,10 @@
 import asyncio
-import logging
 from datetime import datetime, timedelta
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 from ..db.database import SessionLocal
 from .proxy_service import ProxyService
-
-logger = logging.getLogger(__name__)
+from ..core.logging import logger
 
 class ProxyScheduler:
     def __init__(self):
@@ -16,17 +14,19 @@ class ProxyScheduler:
     async def start(self):
         """启动定时任务"""
         self.running = True
+        logger.info("代理调度器已启动")
         while self.running:
             try:
                 await self.check_proxies()
             except Exception as e:
-                logger.error(f"代理检查任务异常: {e}")
+                logger.error("代理检查任务异常, error: {error}")
             
             await asyncio.sleep(self.check_interval)
 
     async def stop(self):
         """停止定时任务"""
         self.running = False
+        logger.info("代理调度器已停止")
 
     async def check_proxies(self):
         """检查代理可用性"""
@@ -42,15 +42,15 @@ class ProxyScheduler:
                 logger.info("没有需要检查的代理")
                 return
             
-            logger.info(f"找到 {len(proxies)} 个需要检查的代理")
+            logger.info(f"找到需要检查的代理, count: {len(proxies)}")
             
             # 检查代理
             for proxy in proxies:
                 try:
-                    logger.info(f"检查代理: {proxy.type}://{proxy.ip}:{proxy.port}")
+                    logger.info(f"检查代理, proxy_id: {proxy.id}, proxy_type: {proxy.type}, proxy_ip: {proxy.ip}, proxy_port: {proxy.port}")
                     await service.check_proxy(proxy)
                 except Exception as e:
-                    logger.error(f"检查代理异常: {proxy.id} - {e}")
+                    logger.error(f"检查代理异常, proxy_id: {proxy.id}, error: {str(e)}")
             
             logger.info("代理检查完成")
 

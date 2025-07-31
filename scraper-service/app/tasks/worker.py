@@ -1,6 +1,5 @@
 import asyncio
 import json
-import logging
 from typing import Dict, Any, Optional, Set
 from aiokafka import AIOKafkaConsumer, AIOKafkaProducer
 import httpx
@@ -13,8 +12,7 @@ from sqlalchemy import update
 from datetime import datetime
 from ..services.task_execution_service import TaskExecutionService
 from ..schemas.task_execution import TaskExecutionUpdate
-
-logger = logging.getLogger(__name__)
+from ..core.logging import logger
 
 
 class TaskWorker:
@@ -25,6 +23,7 @@ class TaskWorker:
         self.producer = None
         self.tasks = {}  # 正在处理的任务
         self.stop_tasks = set()  # 需要停止的任务ID集合
+
 
     async def start(self):
         """启动工作器"""
@@ -138,7 +137,7 @@ class TaskWorker:
                 await self.update_task_status(task_id, "FAILED", 0.0, error_msg="获取账号信息失败")
                 await self.update_execution_status(task_id, "FAILED", error_msg="获取账号信息失败")
                 return
-                
+                            
             # 获取代理信息
             proxy_info = None
             if proxy_id:
@@ -209,7 +208,7 @@ class TaskWorker:
                     
             elif task_type == "SEARCH":
                 query = parameters.get("query")
-                limit = parameters.get("limit", 100)
+                limit = parameters.get("limit", 5)
                 
                 if not query:
                     await self.update_task_status(task_id, "FAILED", 0.0, error_msg="缺少参数: query")
@@ -385,7 +384,7 @@ class TaskWorker:
         try:
             async with httpx.AsyncClient() as client:
                 response = await client.get(
-                    f"{settings.PROXY_SERVICE_URL}/proxies/{proxy_id}"
+                    f"{settings.PROXY_SERVICE_URL}{settings.API_V1_STR}/proxies/{proxy_id}"
                 )
                 if response.status_code == 200:
                     return response.json()

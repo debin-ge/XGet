@@ -4,6 +4,7 @@ from sqlalchemy.future import select
 from sqlalchemy import update, delete, desc, asc, or_, and_
 from ..models.proxy import Proxy
 from ..schemas.proxy import ProxyCreate, ProxyUpdate, ProxyCheckResult
+from ..core.logging import logger
 import uuid
 from datetime import datetime, timedelta
 import aiohttp
@@ -31,6 +32,8 @@ class ProxyService:
         self.db.add(proxy)
         await self.db.commit()
         await self.db.refresh(proxy)
+        
+        logger.info(f"创建代理成功, proxy_id: {proxy.id}, ip: {proxy.ip}, port: {proxy.port}, type: {proxy.type}")
         return proxy
 
     async def get_proxies(
@@ -48,12 +51,22 @@ class ProxyService:
             query = query.filter(Proxy.country == country)
         query = query.offset(skip).limit(limit)
         result = await self.db.execute(query)
-        return result.scalars().all()
+        proxies = result.scalars().all()
+        
+        logger.debug(f"获取代理列表, count: {len(proxies)}, status: {status}, country: {country}")
+        return proxies
 
     async def get_proxy(self, proxy_id: str) -> Optional[Proxy]:
         """获取代理详情"""
         result = await self.db.execute(select(Proxy).filter(Proxy.id == proxy_id))
-        return result.scalars().first()
+        proxy = result.scalars().first()
+        
+        if proxy:
+            logger.debug(f"获取代理详情成功, proxy_id: {proxy_id}")
+        else:
+            logger.debug(f"代理不存在, proxy_id: {proxy_id}")
+        
+        return proxy
 
     async def update_proxy(self, proxy_id: str, proxy_data: ProxyUpdate) -> Optional[Proxy]:
         """更新代理信息"""
@@ -67,7 +80,13 @@ class ProxyService:
         )
         await self.db.commit()
         
-        return await self.get_proxy(proxy_id)
+        proxy = await self.get_proxy(proxy_id)
+        if proxy:
+            logger.info(f"更新代理成功, proxy_id: {proxy_id}, fields: {list(update_data.keys())}")
+        else:
+            logger.error(f"更新代理失败，代理不存在, proxy_id: {proxy_id}")
+        
+        return proxy
 
     async def delete_proxy(self, proxy_id: str) -> bool:
         """删除代理"""
@@ -75,7 +94,14 @@ class ProxyService:
             delete(Proxy).where(Proxy.id == proxy_id)
         )
         await self.db.commit()
-        return result.rowcount > 0
+        
+        success = result.rowcount > 0
+        if success:
+            logger.info(f"删除代理成功, proxy_id: {proxy_id}")
+        else:
+            logger.error(f"删除代理失败，代理不存在, proxy_id: {proxy_id}")
+        
+        return success
 
     async def get_available_proxies(
         self,
@@ -96,7 +122,11 @@ class ProxyService:
             
         query = query.order_by(Proxy.latency).limit(limit)
         result = await self.db.execute(query)
-        return result.scalars().all()
+        proxies = result.scalars().all()
+        
+        logger.debug(f"获取可用代理, count: {len(proxies)}, country: {country}, max_latency: {max_latency}, min_success_rate: {min_success_rate}")
+        
+        return proxies
 
     async def check_proxy(self, proxy: Proxy) -> ProxyCheckResult:
         """检查代理可用性"""
@@ -118,6 +148,8 @@ class ProxyService:
                 proxy_url = f"{proxy.type.lower()}://{proxy.username}:{proxy.password}@{proxy.ip}:{proxy.port}"
             else:
                 proxy_url = f"{proxy.type.lower()}://{proxy.ip}:{proxy.port}"
+                
+            logger.debug(f"开始检查代理, proxy_id: {proxy.id}, proxy_url: {proxy_url}")
                 
             start_time = datetime.now()
             
@@ -147,6 +179,8 @@ class ProxyService:
                         result.status = "ACTIVE"
                         result.latency = latency
                         result.success_rate = proxy.success_rate
+                        
+                        logger.info(f"代理检查成功, proxy_id: {proxy.id}, latency: {latency}, success_rate: {proxy.success_rate}")
                     else:
                         # 更新代理信息
                         proxy.status = "INACTIVE"
@@ -159,6 +193,8 @@ class ProxyService:
                         await self.db.commit()
                         
                         result.error_msg = f"HTTP status: {response.status}"
+                        
+                        logger.error(f"代理检查失败, proxy_id: {proxy.id}, http_status: {response.status}, success_rate: {proxy.success_rate}")
         except Exception as e:
             # 更新代理信息
             proxy.status = "INACTIVE"
@@ -172,11 +208,15 @@ class ProxyService:
             
             result.error_msg = str(e)
             
+            logger.error(f"代理检查异常, proxy_id: {proxy.id}, error: {str(e)}, success_rate: {proxy.success_rate}")
+            
         return result
 
     async def check_proxies(self, proxy_ids: List[str]) -> List[ProxyCheckResult]:
         """批量检查代理可用性"""
         results = []
+        
+        logger.info(f"开始批量检查代理, count: {len(proxy_ids)}")
         
         for proxy_id in proxy_ids:
             proxy = await self.get_proxy(proxy_id)
@@ -189,12 +229,17 @@ class ProxyService:
                     status="INACTIVE",
                     error_msg="Proxy not found"
                 ))
+                logger.error(f"代理不存在, proxy_id: {proxy_id}")
+        
+        logger.info(f"批量检查代理完成, total: {len(proxy_ids)}, active: {sum(1 for r in results if r.status == 'ACTIVE')}, inactive: {sum(1 for r in results if r.status == 'INACTIVE')}")
                 
         return results
 
     async def import_proxies(self, proxies_data: List[ProxyCreate], check_availability: bool = True) -> List[Proxy]:
         """批量导入代理"""
         proxies = []
+        
+        logger.info(f"开始批量导入代理, count: {len(proxies_data)}")
         
         for proxy_data in proxies_data:
             proxy = await self.create_proxy(proxy_data)
@@ -203,6 +248,7 @@ class ProxyService:
         if check_availability:
             # 异步检查所有代理可用性
             proxy_ids = [proxy.id for proxy in proxies]
+            logger.info(f"检查导入代理可用性, count: {len(proxy_ids)}")
             await self.check_proxies(proxy_ids)
             
             # 重新获取代理信息
@@ -211,6 +257,8 @@ class ProxyService:
                 proxy = await self.get_proxy(proxy_id)
                 if proxy:
                     proxies.append(proxy)
+        
+        logger.info(f"批量导入代理完成, count: {len(proxies)}")
                     
         return proxies
 
@@ -254,4 +302,8 @@ class ProxyService:
         ).limit(limit)
         
         result = await self.db.execute(query)
-        return result.scalars().all()
+        proxies = result.scalars().all()
+        
+        logger.debug(f"获取需要检查的代理, count: {len(proxies)}")
+        
+        return proxies

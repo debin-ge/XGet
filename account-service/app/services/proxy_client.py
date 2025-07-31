@@ -2,8 +2,8 @@ import httpx
 from typing import Dict, Optional
 import logging
 from ..core.config import settings
+from ..core.logging import logger
 
-logger = logging.getLogger(__name__)
 
 class ProxyClient:
     """代理服务客户端，用于从代理服务获取代理信息"""

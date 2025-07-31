@@ -14,6 +14,10 @@ class Settings(BaseSettings):
     
     REDIS_URL: str = os.getenv("REDIS_URL", "redis://redis:6379/0")
     
+    # 日志配置
+    LOG_LEVEL: str = os.getenv("LOG_LEVEL", "INFO")
+    LOG_DIR: Optional[str] = os.getenv("LOG_DIR")
+    
     @property
     def get_database_url(self) -> str:
         if self.SQLALCHEMY_DATABASE_URI:

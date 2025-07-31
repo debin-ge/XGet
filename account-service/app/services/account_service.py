@@ -3,18 +3,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 from sqlalchemy import update, delete
 from ..models.account import Account
+from ..schemas.account import AccountCreate, AccountUpdate
 from ..models.login_history import LoginHistory
-from ..schemas.account import AccountCreate, AccountUpdate, AccountResponse, AccountLoginResponse
 import uuid
 from datetime import datetime
 import json
-import logging
-import time
-from .login_service import LoginService
-from .proxy_client import ProxyClient
-
-logger = logging.getLogger(__name__)
-
+from ..core.logging import logger
 
 class AccountService:
     def __init__(self, db: AsyncSession):
@@ -218,7 +212,7 @@ class AccountService:
             response_time = int((time.time() - start_time) * 1000)
             
             error_msg = f"登录异常: {str(e)}"
-            logger.exception(error_msg)
+            logger.error(error_msg)
             account.active = False
             account.error_msg = self._truncate_error_msg(error_msg)
             await self.db.commit()
