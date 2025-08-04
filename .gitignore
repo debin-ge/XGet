@@ -14,6 +14,9 @@ cookies.json
 /analytics-service/
 /monitoring-service/
 /shared/
+/api-gateway/
+/processing-service/
+/storage-service/
 
 # Python
 __pycache__/
@@ -80,12 +83,3 @@ _templates/
 
 # 架构分析文档和图片（可选择是否忽略）
 /images/
-
-# 暂未实现，不作处理
-./api-gateway/
-./auth-service/
-./user-service/
-./analytics-service/
-./monitoring-service/
-./processing-service/
-./storage-service/
