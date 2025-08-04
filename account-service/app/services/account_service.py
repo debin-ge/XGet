@@ -7,8 +7,9 @@ from ..schemas.account import AccountCreate, AccountUpdate
 from ..models.login_history import LoginHistory
 import uuid
 from datetime import datetime
-import json
 from ..core.logging import logger
+from .login_service import LoginService
+from .proxy_client import ProxyClient
 
 class AccountService:
     def __init__(self, db: AsyncSession):

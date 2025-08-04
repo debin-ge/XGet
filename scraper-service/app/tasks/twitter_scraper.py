@@ -59,16 +59,21 @@ class TwitterScraper:
     async def get_user_info(self, username: str) -> Optional[ResultCreate]:
         """获取用户信息"""
         try:
+            users = []
             logger.info(f"正在获取用户信息, username: {username}")
-            user = await self.api.user_by_screen_name(username)
-            if not user:
+            async for user in self.api.search_user(username, limit=1):
+                users.append(user)
+                if len(users) >= 1:
+                    break
+            
+            if not users:
                 logger.warning(f"未找到用户, username: {username}")
                 return None
-                
+            logger.info(f"用户信息: {users}")
             return ResultCreate(
                 task_id="",  # 由调用者设置
                 data_type=RESULT_TYPE_USER,
-                data=user.dict(),
+                data=users[0].dict(),
                 metadata={
                     "source": "twitter",
                     "username": username
@@ -78,62 +83,18 @@ class TwitterScraper:
             logger.error(f"获取用户信息失败, username: {username}, error: {str(e)}")
             return None
 
-    async def get_user_tweets(
-        self, 
-        username: str, 
-        limit: int = 100, 
-        include_replies: bool = False, 
-        include_retweets: bool = False
-    ) -> List[ResultCreate]:
-        """获取用户推文"""
-        results = []
-        try:
-            logger.info(f"正在获取用户推文, username: {username}, limit: {limit}, include_replies: {include_replies}, include_retweets: {include_retweets}")
-            
-            tweets = []
-            async for tweet in self.api.user_tweets(username, limit=limit):
-                # 过滤回复和转发
-                if not include_replies and tweet.in_reply_to_status_id:
-                    continue
-                if not include_retweets and tweet.retweeted_status_id:
-                    continue
-                    
-                tweets.append(tweet)
-                if len(tweets) >= limit:
-                    break
-                    
-            for tweet in tweets:
-                result = ResultCreate(
-                    task_id="",  # 由调用者设置
-                    data_type=RESULT_TYPE_TWEET,
-                    data=tweet.dict(),
-                    metadata={
-                        "source": "twitter",
-                        "username": username,
-                        "tweet_id": tweet.id
-                    }
-                )
-                results.append(result)
-                
-            logger.info(f"成功获取用户推文, username: {username}, count: {len(results)}")
-        except Exception as e:
-            logger.error(f"获取用户推文失败, username: {username}, error: {str(e)}")
-            
-        return results
-
     async def get_user_tweets_stream(
         self, 
-        username: str, 
+        uid: str, 
         limit: int = 5, 
         include_replies: bool = False, 
         include_retweets: bool = False
     ):
         """获取用户推文（流式）"""
-        count = 0
         try:
-            logger.info(f"开始流式获取用户推文, username: {username}, limit: {limit}, include_replies: {include_replies}, include_retweets: {include_retweets}")
+            logger.info(f"开始流式获取用户推文, username: {uid}, limit: {limit}, include_replies: {include_replies}, include_retweets: {include_retweets}")
             
-            async for tweet in self.api.user_tweets(username):
+            async for tweet in self.api.user_tweets(uid, limit=limit):
                 # 过滤回复和转发
                 if not include_replies and tweet.in_reply_to_status_id:
                     continue
@@ -146,50 +107,18 @@ class TwitterScraper:
                     data=tweet.dict(),
                     metadata={
                         "source": "twitter",
-                        "username": username,
+                        "username": uid,
                         "tweet_id": tweet.id
                     }
                 )
                 yield result
-                
-                count += 1
-                if count >= limit:
-                    break
 
-            logger.info(f"流式获取用户推文完成, username: {username}, count: {count}")
+            logger.info(f"流式获取用户推文完成, username: {uid}")
         except Exception as e:
-            logger.error(f"流式获取用户推文失败, username: {username}, error: {str(e)}")
-
-    async def search_tweets(self, query: str, limit: int = 5) -> List[ResultCreate]:
-        """搜索推文"""
-        results = []
-        try:
-            logger.info(f"正在搜索推文, query: {query}, limit: {limit}")
-            
-            async for tweet in self.api.search(query, limit=limit):
-                result = ResultCreate(
-                    task_id="",  # 由调用者设置
-                    data_type=RESULT_TYPE_TWEET,
-                    data=tweet.dict(),
-                    metadata={
-                        "source": "twitter",
-                        "query": query,
-                        "tweet_id": tweet.id
-                    }
-                )
-                results.append(result)
-                if len(results) >= limit:
-                    break
-
-            logger.info(f"成功搜索推文, query: {query}, count: {len(results)}")
-        except Exception as e:
-            logger.error(f"搜索推文失败, query: {query}, error: {str(e)}")
-            
-        return results
+            logger.error(f"流式获取用户推文失败, username: {uid}, error: {str(e)}")
 
     async def search_tweets_stream(self, query: str, limit: int = 5):
         """搜索推文（流式）"""
-        count = 0
         try:
             logger.info(f"开始流式搜索推文, query: {query}, limit: {limit}")
 
@@ -205,77 +134,32 @@ class TwitterScraper:
                     }
                 )
                 yield result
-                count += 1
-                
-                if count >= limit:
-                    break
                     
-            logger.info(f"流式搜索推文完成, query: {query}, count: {count}")
+            logger.info(f"流式搜索推文完成, query: {query}")
         except Exception as e:
             logger.error(f"流式搜索推文失败, query: {query}, error: {str(e)}")
 
-    async def get_followers(self, username: str, limit: int = 100) -> List[ResultCreate]:
-        """获取用户粉丝"""
-        results = []
-        try:
-            logger.info(f"正在获取用户粉丝, username: {username}, limit: {limit}")
-            
-            followers = []
-            async for follower in self.api.followers(username, limit=limit):
-                followers.append(follower)
-                if len(followers) >= limit:
-                    break
-                    
-            for follower in followers:
-                result = ResultCreate(
-                    task_id="",  # 由调用者设置
-                    data_type=RESULT_TYPE_FOLLOWER,
-                    data=follower.dict(),
-                    metadata={
-                        "source": "twitter",
-                        "target_username": username,
-                        "follower_username": follower.screen_name
-                    }
-                )
-                results.append(result)
-                
-            logger.info(f"成功获取用户粉丝, username: {username}, count: {len(results)}")
-        except Exception as e:
-            logger.error(f"获取用户粉丝失败, username: {username}, error: {str(e)}")
-            
-        return results
-
-    async def get_followers_stream(self, username: str, limit: int = 100):
+    async def get_followers_stream(self, uid: str, limit: int = 100):
         """获取用户粉丝（流式）"""
-        count = 0
         try:
-            logger.info(f"开始流式获取用户粉丝, username: {username}, limit: {limit}")
+            logger.info(f"开始流式获取用户粉丝, uid: {uid}, limit: {limit}")
             
-            async for follower in self.api.followers(username):
+            async for follower in self.api.followers(uid, limit=limit):
                 result = ResultCreate(
                     task_id="",  # 由调用者设置
                     data_type=RESULT_TYPE_FOLLOWER,
                     data=follower.dict(),
                     metadata={
                         "source": "twitter",
-                        "target_username": username,
+                        "target_username": follower.display_name,
                         "follower_username": follower.screen_name
                     }
                 )
                 yield result
-                
-                count += 1
-                if count >= limit:
-                    break
                     
-            logger.info(f"流式获取用户粉丝完成, username: {username}, count: {count}")
+            logger.info(f"流式获取用户粉丝完成, uid: {uid}")
         except Exception as e:
-            logger.error(f"流式获取用户粉丝失败, username: {username}, error: {str(e)}")
-
-    async def get_topic_tweets(self, topic: str, limit: int = 100) -> List[ResultCreate]:
-        """获取话题相关推文"""
-        # 话题搜索实际上就是搜索带有特定话题标签的推文
-        return await self.search_tweets(f"#{topic}", limit)
+            logger.error(f"流式获取用户粉丝失败, uid: {uid}, error: {str(e)}")
 
     async def get_topic_tweets_stream(self, topic: str, limit: int = 100):
         """获取话题相关推文（流式）"""

@@ -1,12 +1,11 @@
 import httpx
 from typing import Dict, Optional
-import logging
 from ..core.config import settings
 from ..core.logging import logger
 
 
 class ProxyClient:
-    """代理服务客户端，用于从代理服务获取代理信息"""
+    """代理服务客户端，用于从代理服务获取代理信息并记录使用情况"""
     
     def __init__(self):
         self.base_url = settings.PROXY_SERVICE_URL
@@ -15,19 +14,38 @@ class ProxyClient:
     async def get_proxy(self, proxy_id: str) -> Optional[Dict]:
         """获取指定ID的代理信息"""
         try:
-            response = await self.client.get(f"{self.base_url}/api/v1/proxies/{proxy_id}")
+            response = await self.client.get(f"{self.base_url}{settings.API_V1_STR}/proxies/{proxy_id}")
             response.raise_for_status()
             return response.json()
         except httpx.HTTPError as e:
             logger.error(f"获取代理信息失败: {e}")
             return None
     
-    async def get_available_proxy(self) -> Optional[Dict]:
+    async def get_available_proxy(
+        self, 
+        country: Optional[str] = None,
+        max_latency: Optional[int] = None,
+        min_success_rate: Optional[float] = None,
+        min_quality_score: Optional[float] = None
+    ) -> Optional[Dict]:
         """获取一个可用的代理"""
         try:
-            response = await self.client.get(f"{self.base_url}/api/v1/proxies/available")
+            params = {}
+            if country:
+                params["country"] = country
+            if max_latency:
+                params["max_latency"] = max_latency
+            if min_success_rate:
+                params["min_success_rate"] = min_success_rate
+            if min_quality_score:
+                params["min_quality_score"] = min_quality_score
+                
+            response = await self.client.get(f"{self.base_url}/api/v1/proxies/available", params=params)
             response.raise_for_status()
-            return response.json()
+            proxies = response.json()
+            if proxies and len(proxies) > 0:
+                return proxies[0]
+            return None
         except httpx.HTTPError as e:
             logger.error(f"获取可用代理失败: {e}")
             return None

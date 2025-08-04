@@ -21,7 +21,6 @@ class Settings(BaseSettings):
     
     KAFKA_BOOTSTRAP_SERVERS: str = os.getenv("KAFKA_BOOTSTRAP_SERVERS", "kafka:9092")
     KAFKA_TOPIC_TASKS: str = os.getenv("KAFKA_TOPIC_TASKS", "scraper-tasks")
-    KAFKA_TOPIC_RESULTS: str = os.getenv("KAFKA_TOPIC_RESULTS", "scraper-results")
     KAFKA_TOPIC_CONTROL: str = os.getenv("KAFKA_TOPIC_CONTROL", "scraper-control")
     
     # 日志配置
@@ -29,6 +28,19 @@ class Settings(BaseSettings):
     LOG_DIR: Optional[str] = os.getenv("LOG_DIR")
     
     MAX_CONCURRENT_TASKS: int = 5
+    
+    # Kafka消费者配置 (aiokafka支持的参数)
+    KAFKA_MAX_POLL_RECORDS: int = int(os.getenv("KAFKA_MAX_POLL_RECORDS", "10"))
+    KAFKA_SESSION_TIMEOUT_MS: int = int(os.getenv("KAFKA_SESSION_TIMEOUT_MS", "30000"))
+    KAFKA_HEARTBEAT_INTERVAL_MS: int = int(os.getenv("KAFKA_HEARTBEAT_INTERVAL_MS", "3000"))
+    KAFKA_FETCH_MAX_WAIT_MS: int = int(os.getenv("KAFKA_FETCH_MAX_WAIT_MS", "500"))
+    KAFKA_FETCH_MIN_BYTES: int = int(os.getenv("KAFKA_FETCH_MIN_BYTES", "1"))
+    KAFKA_FETCH_MAX_BYTES: int = int(os.getenv("KAFKA_FETCH_MAX_BYTES", "52428800"))  # 50MB
+    
+    # Kafka主题配置
+    KAFKA_TOPIC_PARTITIONS: int = int(os.getenv("KAFKA_TOPIC_PARTITIONS", "3"))
+    KAFKA_TOPIC_RETENTION_MS: str = os.getenv("KAFKA_TOPIC_RETENTION_MS", "604800000")  # 7天
+    KAFKA_TOPIC_MAX_MESSAGE_BYTES: str = os.getenv("KAFKA_TOPIC_MAX_MESSAGE_BYTES", "1048576")  # 1MB
     
     @property
     def get_database_url(self) -> str:

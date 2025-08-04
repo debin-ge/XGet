@@ -1,12 +1,15 @@
 from playwright.async_api import async_playwright
-from typing import Dict, Optional
+from typing import Dict, Optional, Tuple
 from ..core.logging import logger
+from .proxy_client import ProxyClient
 
 
 class LoginService:
     async def login_with_twitter(self, account: Dict, proxy: Dict) -> Dict:
         """使用Twitter账号密码登录"""
         cookies_dict = {}
+        proxy_client = ProxyClient()
+        login_success = False
         
         async with async_playwright() as p:
             proxy_server = f"{proxy['type'].lower()}://{proxy['ip']}:{proxy['port']}"
@@ -72,17 +75,25 @@ class LoginService:
                 # 获取cookies
                 cookies = await context.cookies()
                 cookies_dict = {c['name']: c['value'] for c in cookies}
+                login_success = len(cookies_dict) > 0
                 
             except Exception as e:
                 logger.error(f"登录失败: {e}")
+                login_success = False
             finally:
                 await browser.close()
+        
+        # 记录代理使用结果
+        if proxy and proxy.get('id'):
+            await proxy_client.record_proxy_usage(proxy['id'], login_success)
                 
         return cookies_dict
     
     async def login_with_google(self, account: Dict, google_account: Dict, proxy: Dict) -> Dict:
         """使用Google账号登录Twitter"""
         cookies_dict = {}
+        proxy_client = ProxyClient()
+        login_success = False
         
         async with async_playwright() as playwright:
             proxy_server = f"{proxy['type'].lower()}://{proxy['ip']}:{proxy['port']}"
@@ -203,10 +214,16 @@ class LoginService:
                 # 获取cookies
                 cookies = await context.cookies()
                 cookies_dict = {c['name']: c['value'] for c in cookies}
+                login_success = len(cookies_dict) > 0
 
             except Exception as e:
                 logger.error(f"Google登录流程异常: {e}")
+                login_success = False
             finally:
                 await browser.close()
+        
+        # 记录代理使用结果
+        if proxy and proxy.get('id'):
+            await proxy_client.record_proxy_usage(proxy['id'], login_success)
 
         return cookies_dict

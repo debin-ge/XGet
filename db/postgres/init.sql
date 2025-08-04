@@ -61,6 +61,20 @@ CREATE TABLE proxies (
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
+-- 创建代理质量监控表
+CREATE TABLE proxy_qualities (
+    id VARCHAR(36) PRIMARY KEY,
+    proxy_id VARCHAR(36) REFERENCES proxies(id) ON DELETE CASCADE,
+    total_usage INTEGER DEFAULT 0,
+    success_count INTEGER DEFAULT 0,
+    quality_score FLOAT DEFAULT 0.8,
+    last_used TIMESTAMP,
+    cooldown_time INTEGER DEFAULT 0,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(proxy_id)
+);
+
 -- 切换到爬虫数据库
 \c scraper_db;
 

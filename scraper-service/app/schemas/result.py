@@ -6,7 +6,7 @@ from datetime import datetime
 class ResultBase(BaseModel):
     task_id: str
     data_type: str
-    data: Dict[str, Any]
+    data: Any
     metadata: Optional[Dict[str, Any]] = None
 
 

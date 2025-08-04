@@ -1,12 +1,14 @@
 from fastapi import APIRouter, Depends, HTTPException, status, Query, UploadFile, File
 from sqlalchemy.ext.asyncio import AsyncSession
 from typing import List, Optional, Dict
+from datetime import datetime
 
 from ..db.database import get_db
 from ..schemas.proxy import (
     ProxyCreate, ProxyUpdate, ProxyResponse, 
     ProxyCheck, ProxyCheckResponse, ProxyCheckResult,
-    ProxyImport, ProxyImportResponse, ProxyImportResult
+    ProxyImport, ProxyImportResponse, ProxyImportResult,
+    ProxyQualityResponse, ProxyQualityUpdate, ProxyUsageResult
 )
 from ..services.proxy_service import ProxyService
 import csv
@@ -41,11 +43,12 @@ async def get_available_proxies(
     country: Optional[str] = None,
     max_latency: Optional[int] = None,
     min_success_rate: Optional[float] = None,
+    min_quality_score: Optional[float] = None,
     db: AsyncSession = Depends(get_db)
 ):
     """获取可用代理"""
     service = ProxyService(db)
-    return await service.get_available_proxies(limit, country, max_latency, min_success_rate)
+    return await service.get_available_proxies(limit, country, max_latency, min_success_rate, min_quality_score)
 
 @router.get("/{proxy_id}", response_model=ProxyResponse)
 async def get_proxy(
@@ -294,32 +297,81 @@ async def get_proxy_stats(
 async def rotate_proxy(
     country: Optional[str] = None,
     max_latency: Optional[int] = None,
-    min_success_rate: Optional[float] = 0.8,
+    min_success_rate: Optional[float] = 0.5,
+    min_quality_score: Optional[float] = 0.6,
     db: AsyncSession = Depends(get_db)
 ):
-    """轮换代理（获取一个可用代理并标记为已使用）"""
+    """轮换代理（获取一个高质量可用代理）"""
     service = ProxyService(db)
     
-    # 获取可用代理
-    proxies = await service.get_available_proxies(
-        limit=1,
+    # 获取轮换代理
+    proxy = await service.get_rotating_proxy(
         country=country,
         max_latency=max_latency,
-        min_success_rate=min_success_rate
+        min_success_rate=min_success_rate,
+        min_quality_score=min_quality_score
     )
     
-    if not proxies:
+    if not proxy:
         raise HTTPException(status_code=404, detail="No available proxy found")
     
-    proxy = proxies[0]
-    
-    # 更新代理使用时间
-    proxy = await service.update_proxy(
-        proxy.id,
-        ProxyUpdate(last_used=datetime.now())
-    )
+    # 更新代理质量信息（标记为已使用）
+    await service.record_proxy_usage(proxy.id, True)  # 初始状态设为成功
     
     return proxy
+
+@router.post("/{proxy_id}/usage", response_model=ProxyUsageResult)
+async def record_proxy_usage(
+    proxy_id: str,
+    success: bool,
+    db: AsyncSession = Depends(get_db)
+):
+    """记录代理使用情况（成功/失败）"""
+    service = ProxyService(db)
+    
+    proxy, quality = await service.record_proxy_usage(proxy_id, success)
+    
+    if not proxy or not quality:
+        raise HTTPException(status_code=404, detail="Proxy not found")
+    
+    return ProxyUsageResult(
+        success=True,
+        error_msg=None
+    )
+
+@router.get("/{proxy_id}/quality", response_model=ProxyQualityResponse)
+async def get_proxy_quality(
+    proxy_id: str,
+    db: AsyncSession = Depends(get_db)
+):
+    """获取代理质量详情"""
+    service = ProxyService(db)
+    
+    quality = await service.get_proxy_quality(proxy_id)
+    if not quality:
+        raise HTTPException(status_code=404, detail="Proxy quality not found")
+    
+    return quality
+
+@router.put("/{proxy_id}/quality", response_model=ProxyQualityResponse)
+async def update_proxy_quality(
+    proxy_id: str,
+    quality_data: ProxyQualityUpdate,
+    db: AsyncSession = Depends(get_db)
+):
+    """手动更新代理质量信息"""
+    service = ProxyService(db)
+    
+    # 检查代理是否存在
+    proxy = await service.get_proxy(proxy_id)
+    if not proxy:
+        raise HTTPException(status_code=404, detail="Proxy not found")
+        
+    quality = await service.update_proxy_quality(proxy_id, quality_data)
+    if not quality:
+        raise HTTPException(status_code=404, detail="Proxy quality not found")
+    
+    return quality
 
 @router.post("/batch-check", response_model=Dict)
 async def batch_check_proxies(
