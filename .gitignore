@@ -1,13 +1,3 @@
-# 敏感数据文件
-accounts.txt
-proxy.txt
-accounts.db
-cookies.json
-*.cookies
-*.session
-*.auth
-*.token
-
 # 尚未实现的服务
 /auth-service/
 /user-service/
@@ -25,25 +15,7 @@ __pycache__/
 *.so
 .Python
 build/
-develop-eggs/
-dist/
-downloads/
-eggs/
-.eggs/
-lib/
-lib64/
-parts/
-sdist/
-var/
-wheels/
-*.egg-info/
-.installed.cfg
-*.egg
-.venv/
-venv/
-venv_py312/
-env/
-ENV/
+
 
 # 环境变量和密钥
 .env
@@ -54,11 +26,6 @@ secrets/
 *.key
 *.pem
 
-# 数据和日志
-data/
-logs/
-*.log
-
 # IDE和编辑器
 .vscode/
 .idea/
@@ -68,6 +35,7 @@ logs/
 .project
 .pydevproject
 .settings/
+.clocignore
 
 # 临时文件
 *.tmp

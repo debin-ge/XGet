@@ -25,6 +25,8 @@ class Proxy(Base):
     
     # 关联质量监控记录
     quality = relationship("ProxyQuality", back_populates="proxy", uselist=False)
+    # 关联使用历史记录
+    usage_history = relationship("ProxyUsageHistory", back_populates="proxy", cascade="all, delete-orphan")
 
 
 class ProxyQuality(Base):
@@ -42,3 +44,19 @@ class ProxyQuality(Base):
     
     # 关联到代理
     proxy = relationship("Proxy", back_populates="quality")
+
+
+class ProxyUsageHistory(Base):
+    __tablename__ = "proxy_usage_history"
+    
+    id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    proxy_id = Column(String, ForeignKey("proxies.id", ondelete="CASCADE"))
+    user_id = Column(String, nullable=True)  # 使用用户ID
+    service_name = Column(String, nullable=True)  # 使用服务名称
+    success = Column(String, default="SUCCESS")  # SUCCESS, FAILED, TIMEOUT
+    response_time = Column(Integer, nullable=True)  # 响应时间（毫秒）
+    created_at = Column(DateTime, server_default=func.now())
+    updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now())
+    
+    # 关联到代理
+    proxy = relationship("Proxy", back_populates="usage_history")

@@ -2,8 +2,11 @@ from typing import List, Optional, Dict, Any, Tuple
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 from sqlalchemy import update, delete, desc, asc, or_, and_, func, exists, String, Integer
-from ..models.proxy import Proxy, ProxyQuality
-from ..schemas.proxy import ProxyCreate, ProxyUpdate, ProxyCheckResult, ProxyQualityCreate, ProxyQualityUpdate
+from ..models.proxy import Proxy, ProxyQuality, ProxyUsageHistory
+from ..schemas.proxy import (
+    ProxyCreate, ProxyUpdate, ProxyCheckResult, ProxyQualityCreate, ProxyQualityUpdate,
+    ProxyUsageHistoryCreate, ProxyUsageHistoryFilter
+)
 from ..core.logging import logger
 import uuid
 from datetime import datetime, timedelta
@@ -481,9 +484,8 @@ class ProxyService:
         )
         
         if proxies:
-            proxy = proxies[0]
-            logger.info(f"获取高质量轮换代理成功, proxy_id: {proxy.id}, ip: {proxy.ip}")
-            return proxy
+            logger.info(f"获取高质量轮换代理成功, proxy_id: {proxies[0].id}, ip: {proxies[0].ip}")
+            return proxies[0]
             
         # 如果没有满足质量要求的代理，随机获取一个未达标的代理
         # 但排除掉那些质量分太低的代理
@@ -536,3 +538,149 @@ class ProxyService:
         logger.info(f"随机获取轮换代理成功, proxy_id: {proxy.id}, ip: {proxy.ip}")
         
         return proxy
+
+    # 代理使用历史记录相关方法
+    async def create_usage_history(self, history_data: ProxyUsageHistoryCreate) -> ProxyUsageHistory:
+        """创建代理使用历史记录"""
+        history = ProxyUsageHistory(
+            id=str(uuid.uuid4()),
+            proxy_id=history_data.proxy_id,
+            user_id=history_data.user_id,
+            service_name=history_data.service_name,
+            success=history_data.success,
+            response_time=history_data.response_time
+        )
+        self.db.add(history)
+        await self.db.commit()
+        await self.db.refresh(history)
+        
+        logger.info(f"创建代理使用历史记录成功, history_id: {history.id}, proxy_id: {history.proxy_id}, success: {history.success}")
+        return history
+
+    async def get_usage_history(self, history_id: str) -> Optional[ProxyUsageHistory]:
+        """获取代理使用历史记录详情"""
+        result = await self.db.execute(select(ProxyUsageHistory).filter(ProxyUsageHistory.id == history_id))
+        history = result.scalars().first()
+        
+        if history:
+            logger.debug(f"获取代理使用历史记录成功, history_id: {history_id}")
+        else:
+            logger.debug(f"代理使用历史记录不存在, history_id: {history_id}")
+        
+        return history
+
+    async def get_usage_history_list(self, filter_data: ProxyUsageHistoryFilter) -> Tuple[List[ProxyUsageHistory], int]:
+        """获取代理使用历史记录列表"""
+        query = select(ProxyUsageHistory)
+        
+        # 应用过滤条件
+        if filter_data.proxy_id:
+            query = query.filter(ProxyUsageHistory.proxy_id == filter_data.proxy_id)
+        if filter_data.user_id:
+            query = query.filter(ProxyUsageHistory.user_id == filter_data.user_id)
+        if filter_data.service_name:
+            query = query.filter(ProxyUsageHistory.service_name == filter_data.service_name)
+        if filter_data.success:
+            query = query.filter(ProxyUsageHistory.success == filter_data.success)
+        if filter_data.start_date:
+            query = query.filter(ProxyUsageHistory.created_at >= filter_data.start_date)
+        if filter_data.end_date:
+            query = query.filter(ProxyUsageHistory.created_at <= filter_data.end_date)
+        
+        # 获取总数
+        count_query = select(func.count()).select_from(query.subquery())
+        count_result = await self.db.execute(count_query)
+        total = count_result.scalar()
+        
+        # 排序和分页
+        query = query.order_by(desc(ProxyUsageHistory.created_at))
+        query = query.offset((filter_data.page - 1) * filter_data.size).limit(filter_data.size)
+        
+        result = await self.db.execute(query)
+        histories = result.scalars().all()
+        
+        logger.debug(f"获取代理使用历史记录列表成功, total: {total}, page: {filter_data.page}, size: {filter_data.size}")
+        return histories, total
+
+    async def get_proxy_usage_statistics(self, proxy_id: str, days: int = 7) -> Dict[str, Any]:
+        """获取代理使用统计信息"""
+        start_date = datetime.now() - timedelta(days=days)
+        
+        # 基础查询
+        query = select(ProxyUsageHistory).filter(
+            ProxyUsageHistory.proxy_id == proxy_id,
+            ProxyUsageHistory.created_at >= start_date
+        )
+        
+        result = await self.db.execute(query)
+        histories = result.scalars().all()
+        
+        # 计算统计信息
+        total_usage = len(histories)
+        success_count = sum(1 for h in histories if h.success == "SUCCESS")
+        failed_count = sum(1 for h in histories if h.success == "FAILED")
+        timeout_count = sum(1 for h in histories if h.success == "TIMEOUT")
+        
+        success_rate = success_count / total_usage if total_usage > 0 else 0
+        avg_response_time = sum(h.response_time or 0 for h in histories) / total_usage if total_usage > 0 else 0
+        
+        # 按日期分组统计
+        daily_stats = {}
+        for history in histories:
+            date_key = history.created_at.strftime("%Y-%m-%d")
+            if date_key not in daily_stats:
+                daily_stats[date_key] = {"total": 0, "success": 0, "failed": 0, "timeout": 0}
+            
+            daily_stats[date_key]["total"] += 1
+            if history.success == "SUCCESS":
+                daily_stats[date_key]["success"] += 1
+            elif history.success == "FAILED":
+                daily_stats[date_key]["failed"] += 1
+            elif history.success == "TIMEOUT":
+                daily_stats[date_key]["timeout"] += 1
+        
+        statistics = {
+            "proxy_id": proxy_id,
+            "period_days": days,
+            "total_usage": total_usage,
+            "success_count": success_count,
+            "failed_count": failed_count,
+            "timeout_count": timeout_count,
+            "success_rate": round(success_rate, 4),
+            "avg_response_time": round(avg_response_time, 2),
+            "daily_stats": daily_stats
+        }
+        
+        logger.debug(f"获取代理使用统计信息成功, proxy_id: {proxy_id}, days: {days}")
+        return statistics
+
+    async def record_proxy_usage_with_history(
+        self, 
+        proxy_id: str, 
+        success: bool,
+        user_id: Optional[str] = None,
+        service_name: Optional[str] = None,
+        response_time: Optional[int] = None
+    ) -> Tuple[Optional[Proxy], Optional[ProxyQuality], Optional[ProxyUsageHistory]]:
+        """记录代理使用情况（包含历史记录）"""
+        # 首先记录使用情况并更新质量
+        proxy, quality = await self.record_proxy_usage(proxy_id, success)
+        if not proxy:
+            return None, None, None
+        
+        # 确定成功状态
+        success_status = "SUCCESS" if success else "FAILED"
+        
+        # 创建使用历史记录
+        history_data = ProxyUsageHistoryCreate(
+            proxy_id=proxy_id,
+            user_id=user_id,
+            service_name=service_name,
+            success=success_status,
+            response_time=response_time
+        )
+        
+        history = await self.create_usage_history(history_data)
+        
+        logger.info(f"记录代理使用情况（含历史）成功, proxy_id: {proxy_id}, success: {success}, history_id: {history.id}")
+        return proxy, quality, history

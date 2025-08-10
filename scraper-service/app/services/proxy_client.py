@@ -70,17 +70,34 @@ class ProxyClient:
             logger.error(f"获取轮换代理失败: {e}")
             return None
             
-    async def record_proxy_usage(self, proxy_id: str, success: bool) -> bool:
-        """记录代理使用结果"""
+    async def record_proxy_usage(
+        self, 
+        proxy_id: str, 
+        success: bool,
+        user_id: Optional[str] = None,
+        service_name: Optional[str] = None,
+        response_time: Optional[int] = None
+    ) -> bool:
+        """记录代理使用结果（包含历史记录）"""
         if not proxy_id:
             logger.warning("无法记录代理使用结果：代理ID为空")
             return False
             
         try:
-            params = {"success": "true" if success else "false"}
-            response = await self.client.post(f"{self.base_url}/api/v1/proxies/{proxy_id}/usage", params=params)
+            # 构建请求数据
+            data = {
+                "success": success,
+                "user_id": user_id,
+                "service_name": service_name or "scraper-service",
+                "response_time": response_time
+            }
+            
+            # 移除None值
+            data = {k: v for k, v in data.items() if v is not None}
+            
+            response = await self.client.post(f"{self.base_url}/api/v1/proxies/{proxy_id}/usage", json=data)
             response.raise_for_status()
-            logger.info(f"记录代理使用结果成功: proxy_id={proxy_id}, success={success}")
+            logger.info(f"记录代理使用结果成功: proxy_id={proxy_id}, success={success}, service={data.get('service_name')}")
             return True
         except httpx.HTTPError as e:
             logger.error(f"记录代理使用结果失败: proxy_id={proxy_id}, success={success}, error={e}")

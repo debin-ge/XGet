@@ -6,8 +6,10 @@ from ..models.account import Account
 from ..schemas.account import AccountCreate, AccountUpdate
 from ..models.login_history import LoginHistory
 import uuid
+from time import time
 from datetime import datetime
 from ..core.logging import logger
+from ..core.config import settings 
 from .login_service import LoginService
 from .proxy_client import ProxyClient
 
@@ -126,6 +128,7 @@ class AccountService:
                 
             # 准备账号信息
             account_dict = {
+                "id": account_id,
                 "username": account.username,
                 "password": account.password,
                 "email": account.email,
@@ -148,6 +151,7 @@ class AccountService:
             elif account.login_method == "GOOGLE":
                 logger.info(f"使用Google方式登录账号: {account.username}")
                 google_account = {
+                    "id": account_id,
                     "email": account.email,
                     "email_password": account.email_password
                 }
@@ -206,6 +210,16 @@ class AccountService:
             
             await self.db.commit()
             await self.db.refresh(account)
+
+            # 记录代理使用结果（包含历史记录）
+            if proxy:
+                await self.proxy_client.record_proxy_usage(
+                    proxy_id=(proxy_id or proxy.get("id")),
+                    success=(True if cookies_dict else False),
+                    user_id=account_id,
+                    service_name=settings.PROJECT_NAME,
+                    response_time=response_time
+                )
             return account
             
         except Exception as e:
@@ -226,6 +240,16 @@ class AccountService:
                 error_msg=error_msg,
                 response_time=response_time
             )
+            
+            # 记录代理使用结果（包含历史记录）
+            if proxy:
+                await self.proxy_client.record_proxy_usage(
+                    proxy_id=(proxy_id or proxy.get("id")),
+                    success=False,
+                    user_id=account_id,
+                    service_name=settings.PROJECT_NAME,
+                    response_time=response_time
+                )
             
             await self.db.refresh(account)
             return account

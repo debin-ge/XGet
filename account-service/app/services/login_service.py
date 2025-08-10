@@ -1,7 +1,9 @@
 from playwright.async_api import async_playwright
 from typing import Dict, Optional, Tuple
 from ..core.logging import logger
+from ..core.config import settings
 from .proxy_client import ProxyClient
+from time import time
 
 
 class LoginService:
@@ -37,6 +39,8 @@ class LoginService:
             )
             
             page = await context.new_page()
+
+            start_time = time.time()
             
             try:
                 # 访问登录页面
@@ -81,11 +85,18 @@ class LoginService:
                 logger.error(f"登录失败: {e}")
                 login_success = False
             finally:
+                response_time = int((time.time() - start_time) * 1000)
                 await browser.close()
         
         # 记录代理使用结果
         if proxy and proxy.get('id'):
-            await proxy_client.record_proxy_usage(proxy['id'], login_success)
+            await proxy_client.record_proxy_usage(
+                proxy['id'], 
+                login_success,
+                user_id=account["id"],
+                service_name=settings.PROJECT_NAME,
+                response_time=response_time
+            )
                 
         return cookies_dict
     
@@ -125,6 +136,8 @@ class LoginService:
             )
             
             page = await context.new_page()
+
+            start_time = time.time()
             
             try:
                 # 打开登录页
@@ -220,10 +233,17 @@ class LoginService:
                 logger.error(f"Google登录流程异常: {e}")
                 login_success = False
             finally:
+                response_time = int((time.time() - start_time) * 1000)
                 await browser.close()
         
         # 记录代理使用结果
         if proxy and proxy.get('id'):
-            await proxy_client.record_proxy_usage(proxy['id'], login_success)
+            await proxy_client.record_proxy_usage(
+                proxy['id'], 
+                login_success,
+                user_id=google_account["id"],
+                service_name=settings.PROJECT_NAME,
+                response_time=response_time
+            )
 
         return cookies_dict

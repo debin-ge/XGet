@@ -8,7 +8,9 @@ from ..schemas.proxy import (
     ProxyCreate, ProxyUpdate, ProxyResponse, 
     ProxyCheck, ProxyCheckResponse, ProxyCheckResult,
     ProxyImport, ProxyImportResponse, ProxyImportResult,
-    ProxyQualityResponse, ProxyQualityUpdate, ProxyUsageResult
+    ProxyQualityResponse, ProxyQualityUpdate, ProxyUsageResult,
+    ProxyUsageHistoryCreate, ProxyUsageHistoryResponse,
+    ProxyUsageHistoryListResponse, ProxyUsageHistoryFilter
 )
 from ..services.proxy_service import ProxyService
 import csv
@@ -315,21 +317,28 @@ async def rotate_proxy(
     if not proxy:
         raise HTTPException(status_code=404, detail="No available proxy found")
     
-    # 更新代理质量信息（标记为已使用）
-    await service.record_proxy_usage(proxy.id, True)  # 初始状态设为成功
-    
     return proxy
 
 @router.post("/{proxy_id}/usage", response_model=ProxyUsageResult)
 async def record_proxy_usage(
     proxy_id: str,
     success: bool,
+    user_id: Optional[str] = None,
+    service_name: Optional[str] = None,
+    response_time: Optional[int] = None,
     db: AsyncSession = Depends(get_db)
 ):
-    """记录代理使用情况（成功/失败）"""
+    """记录代理使用情况（成功/失败，包含历史记录）"""
     service = ProxyService(db)
     
-    proxy, quality = await service.record_proxy_usage(proxy_id, success)
+    # 使用新的方法，同时记录使用情况和历史记录
+    proxy, quality, history = await service.record_proxy_usage_with_history(
+        proxy_id=proxy_id,
+        success=success,
+        user_id=user_id,
+        service_name=service_name,
+        response_time=response_time
+    )
     
     if not proxy or not quality:
         raise HTTPException(status_code=404, detail="Proxy not found")
@@ -400,3 +409,160 @@ async def batch_check_proxies(
         "active": active_count,
         "inactive": inactive_count
     }
+
+# 代理使用历史记录相关API
+@router.post("/{proxy_id}/usage/history", response_model=ProxyUsageHistoryResponse)
+async def create_proxy_usage_history(
+    proxy_id: str,
+    history_data: ProxyUsageHistoryCreate,
+    db: AsyncSession = Depends(get_db)
+):
+    """创建代理使用历史记录"""
+    service = ProxyService(db)
+    
+    # 检查代理是否存在
+    proxy = await service.get_proxy(proxy_id)
+    if not proxy:
+        raise HTTPException(status_code=404, detail="Proxy not found")
+    
+    # 确保proxy_id一致
+    history_data.proxy_id = proxy_id
+    
+    history = await service.create_usage_history(history_data)
+    return history
+
+@router.get("/{proxy_id}/usage/history", response_model=ProxyUsageHistoryListResponse)
+async def get_proxy_usage_history_list(
+    proxy_id: str,
+    user_id: Optional[str] = None,
+    service_name: Optional[str] = None,
+    success: Optional[str] = None,
+    start_date: Optional[datetime] = None,
+    end_date: Optional[datetime] = None,
+    page: int = Query(1, ge=1, description="页码"),
+    size: int = Query(20, ge=1, le=100, description="每页数量"),
+    db: AsyncSession = Depends(get_db)
+):
+    """获取代理使用历史记录列表"""
+    service = ProxyService(db)
+    
+    # 检查代理是否存在
+    proxy = await service.get_proxy(proxy_id)
+    if not proxy:
+        raise HTTPException(status_code=404, detail="Proxy not found")
+    
+    filter_data = ProxyUsageHistoryFilter(
+        proxy_id=proxy_id,
+        user_id=user_id,
+        service_name=service_name,
+        success=success,
+        start_date=start_date,
+        end_date=end_date,
+        page=page,
+        size=size
+    )
+    
+    histories, total = await service.get_usage_history_list(filter_data)
+    
+    return ProxyUsageHistoryListResponse(
+        total=total,
+        items=histories,
+        page=page,
+        size=size
+    )
+
+@router.get("/usage/history/{history_id}", response_model=ProxyUsageHistoryResponse)
+async def get_proxy_usage_history(
+    history_id: str,
+    db: AsyncSession = Depends(get_db)
+):
+    """获取代理使用历史记录详情"""
+    service = ProxyService(db)
+    
+    history = await service.get_usage_history(history_id)
+    if not history:
+        raise HTTPException(status_code=404, detail="Usage history not found")
+    
+    return history
+
+@router.get("/{proxy_id}/usage/statistics", response_model=Dict)
+async def get_proxy_usage_statistics(
+    proxy_id: str,
+    days: int = Query(7, ge=1, le=365, description="统计天数"),
+    db: AsyncSession = Depends(get_db)
+):
+    """获取代理使用统计信息"""
+    service = ProxyService(db)
+    
+    # 检查代理是否存在
+    proxy = await service.get_proxy(proxy_id)
+    if not proxy:
+        raise HTTPException(status_code=404, detail="Proxy not found")
+    
+    statistics = await service.get_proxy_usage_statistics(proxy_id, days)
+    return statistics
+
+@router.post("/{proxy_id}/usage/with-history", response_model=Dict)
+async def record_proxy_usage_with_history(
+    proxy_id: str,
+    success: bool,
+    user_id: Optional[str] = None,
+    service_name: Optional[str] = None,
+    response_time: Optional[int] = None,
+    db: AsyncSession = Depends(get_db)
+):
+    """记录代理使用情况（包含历史记录）"""
+    service = ProxyService(db)
+    
+    proxy, quality, history = await service.record_proxy_usage_with_history(
+        proxy_id=proxy_id,
+        success=success,
+        user_id=user_id,
+        service_name=service_name,
+        response_time=response_time
+    )
+    
+    if not proxy or not quality or not history:
+        raise HTTPException(status_code=404, detail="Proxy not found")
+    
+    return {
+        "success": True,
+        "proxy_id": proxy_id,
+        "history_id": history.id,
+        "quality_score": quality.quality_score,
+        "total_usage": quality.total_usage,
+        "success_count": quality.success_count
+    }
+
+@router.get("/usage/history", response_model=ProxyUsageHistoryListResponse)
+async def get_all_usage_history(
+    user_id: Optional[str] = None,
+    service_name: Optional[str] = None,
+    success: Optional[str] = None,
+    start_date: Optional[datetime] = None,
+    end_date: Optional[datetime] = None,
+    page: int = Query(1, ge=1, description="页码"),
+    size: int = Query(20, ge=1, le=100, description="每页数量"),
+    db: AsyncSession = Depends(get_db)
+):
+    """获取所有代理使用历史记录列表"""
+    service = ProxyService(db)
+    
+    filter_data = ProxyUsageHistoryFilter(
+        user_id=user_id,
+        service_name=service_name,
+        success=success,
+        start_date=start_date,
+        end_date=end_date,
+        page=page,
+        size=size
+    )
+    
+    histories, total = await service.get_usage_history_list(filter_data)
+    
+    return ProxyUsageHistoryListResponse(
+        total=total,
+        items=histories,
+        page=page,
+        size=size
+    )

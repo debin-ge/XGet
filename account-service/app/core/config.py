@@ -4,7 +4,7 @@ import os
 
 
 class Settings(BaseSettings):
-    PROJECT_NAME: str = "XGet Account Service"
+    PROJECT_NAME: str = "Account Service"
     API_V1_STR: str = "/api/v1"
     
     POSTGRES_SERVER: str = os.getenv("POSTGRES_SERVER", "postgres")

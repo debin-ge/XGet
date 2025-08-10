@@ -131,3 +131,44 @@ class ProxyImportResponse(BaseModel):
 class ProxyUsageResult(BaseModel):
     success: bool
     error_msg: Optional[str] = None
+
+
+# 代理使用历史记录相关的schema
+class ProxyUsageHistoryCreate(BaseModel):
+    proxy_id: str
+    user_id: Optional[str] = None
+    service_name: Optional[str] = None
+    success: str = "SUCCESS"  # SUCCESS, FAILED, TIMEOUT
+    response_time: Optional[int] = None
+
+
+class ProxyUsageHistoryResponse(BaseModel):
+    id: str
+    proxy_id: str
+    user_id: Optional[str] = None
+    service_name: Optional[str] = None
+    success: str
+    response_time: Optional[int] = None
+    created_at: datetime
+    updated_at: Optional[datetime] = None
+
+    class Config:
+        from_attributes = True
+
+
+class ProxyUsageHistoryListResponse(BaseModel):
+    total: int
+    items: List[ProxyUsageHistoryResponse]
+    page: int
+    size: int
+
+
+class ProxyUsageHistoryFilter(BaseModel):
+    proxy_id: Optional[str] = None
+    user_id: Optional[str] = None
+    service_name: Optional[str] = None
+    success: Optional[str] = None
+    start_date: Optional[datetime] = None
+    end_date: Optional[datetime] = None
+    page: int = 1
+    size: int = 20

@@ -11,6 +11,7 @@ from datetime import datetime
 from ..services.task_execution_service import TaskExecutionService
 from ..schemas.task_execution import TaskExecutionUpdate
 from ..core.logging import logger
+from ..core.config import settings
 from ..services.proxy_client import ProxyClient
 from ..services.account_client import AccountClient
 from ..db.database import get_db
@@ -194,7 +195,13 @@ class TaskWorker:
                 
                 # 记录代理使用失败
                 if proxy_id:
-                    await self.proxy_client.record_proxy_usage(proxy_id, False)
+                    await self.proxy_client.record_proxy_usage(
+                        proxy_id=proxy_id,
+                        success=False,
+                        user_id=account_id,
+                        service_name=settings.PROJECT_NAME,
+                        response_time=None
+                    )
                     
                 return
                 
@@ -335,7 +342,13 @@ class TaskWorker:
                 
             # 记录代理使用结果
             if proxy_id:
-                await self.proxy_client.record_proxy_usage(proxy_id, task_success)
+                await self.proxy_client.record_proxy_usage(
+                    proxy_id=proxy_id,
+                    success=task_success,
+                    user_id=account_id,
+                    service_name=settings.PROJECT_NAME,
+                    response_time=None
+                )
                 
         except Exception as e:
             logger.error(f"处理任务异常: {task_id} - {e}")
@@ -344,7 +357,13 @@ class TaskWorker:
             
             # 记录代理使用失败
             if proxy_id:
-                await self.proxy_client.record_proxy_usage(proxy_id, False)
+                await self.proxy_client.record_proxy_usage(
+                    proxy_id=proxy_id,
+                    success=False,
+                    user_id=account_id,
+                    service_name=settings.PROJECT_NAME,
+                    response_time=None
+                )
                 
         finally:
             # 从正在处理的任务和停止任务集合中移除

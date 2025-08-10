@@ -75,6 +75,26 @@ CREATE TABLE proxy_qualities (
     UNIQUE(proxy_id)
 );
 
+-- 创建代理使用历史记录表
+CREATE TABLE proxy_usage_history (
+    id VARCHAR(36) PRIMARY KEY,
+    proxy_id VARCHAR(36) REFERENCES proxies(id) ON DELETE CASCADE,
+    user_id VARCHAR(36),
+    service_name VARCHAR(255),
+    success VARCHAR(20) DEFAULT 'SUCCESS',
+    response_time INTEGER,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- 创建索引以提高查询性能
+CREATE INDEX idx_proxy_usage_history_proxy_id ON proxy_usage_history(proxy_id);
+CREATE INDEX idx_proxy_usage_history_user_id ON proxy_usage_history(user_id);
+CREATE INDEX idx_proxy_usage_history_service_name ON proxy_usage_history(service_name);
+CREATE INDEX idx_proxy_usage_history_success ON proxy_usage_history(success);
+CREATE INDEX idx_proxy_usage_history_created_at ON proxy_usage_history(created_at);
+CREATE INDEX idx_proxy_usage_history_proxy_created ON proxy_usage_history(proxy_id, created_at);
+
 -- 切换到爬虫数据库
 \c scraper_db;
 
