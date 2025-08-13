@@ -1,9 +1,9 @@
 from typing import List, Optional, Dict, Any
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
-from sqlalchemy import update, delete
+from sqlalchemy import update, delete, func
 from ..models.account import Account
-from ..schemas.account import AccountCreate, AccountUpdate
+from ..schemas.account import AccountCreate, AccountUpdate, AccountListResponse
 from ..models.login_history import LoginHistory
 import uuid
 from time import time
@@ -34,7 +34,34 @@ class AccountService:
         await self.db.refresh(account)
         return account
 
+    async def get_accounts_paginated(self, page: int = 1, size: int = 20, active: Optional[bool] = None) -> AccountListResponse:
+        """获取分页的账户列表"""
+        # 计算偏移量
+        offset = (page - 1) * size
+        
+        # 构建基础查询
+        query = select(Account)
+        count_query = select(func.count(Account.id))
+        
+        # 添加筛选条件
+        if active is not None:
+            query = query.filter(Account.active == active)
+            count_query = count_query.filter(Account.active == active)
+        
+        # 获取总数
+        total_result = await self.db.execute(count_query)
+        total = total_result.scalar() or 0
+        
+        # 获取分页数据
+        query = query.offset(offset).limit(size)
+        result = await self.db.execute(query)
+        accounts = result.scalars().all()
+        
+        # 返回分页响应
+        return AccountListResponse.create(accounts, total, page, size)
+
     async def get_accounts(self, skip: int = 0, limit: int = 100, active: Optional[bool] = None) -> List[Account]:
+        """保留原有方法以兼容性"""
         query = select(Account)
         if active is not None:
             query = query.filter(Account.active == active)

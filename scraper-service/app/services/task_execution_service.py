@@ -1,11 +1,12 @@
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
+from sqlalchemy import func
 from datetime import datetime
 import time
 from typing import Optional, List
 
 from ..models.task_execution import TaskExecution
-from ..schemas.task_execution import TaskExecutionCreate, TaskExecutionUpdate
+from ..schemas.task_execution import TaskExecutionCreate, TaskExecutionUpdate, TaskExecutionListResponse
 
 
 class TaskExecutionService:
@@ -66,6 +67,29 @@ class TaskExecutionService:
         query = select(TaskExecution).where(TaskExecution.task_id == task_id).order_by(TaskExecution.started_at.desc())
         result = await self.db.execute(query)
         return result.scalars().all()
+
+    async def get_executions_by_task_paginated(
+        self,
+        task_id: str,
+        page: int = 1,
+        size: int = 20
+    ) -> TaskExecutionListResponse:
+        """获取任务执行记录的分页列表"""
+        # 构建查询条件
+        query = select(TaskExecution).where(TaskExecution.task_id == task_id).order_by(TaskExecution.started_at.desc())
+        count_query = select(func.count(TaskExecution.id)).where(TaskExecution.task_id == task_id)
+        
+        # 获取总数
+        total_result = await self.db.execute(count_query)
+        total = total_result.scalar() or 0
+        
+        # 获取分页数据
+        offset = (page - 1) * size
+        query = query.offset(offset).limit(size)
+        result = await self.db.execute(query)
+        executions = result.scalars().all()
+        
+        return TaskExecutionListResponse.create(executions, total, page, size)
 
     async def complete_execution(self, execution_id: str, status: str, error_message: Optional[str] = None) -> Optional[TaskExecution]:
         """完成任务执行记录"""

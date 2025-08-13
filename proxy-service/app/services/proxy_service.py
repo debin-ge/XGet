@@ -5,7 +5,7 @@ from sqlalchemy import update, delete, desc, asc, or_, and_, func, exists, Strin
 from ..models.proxy import Proxy, ProxyQuality, ProxyUsageHistory
 from ..schemas.proxy import (
     ProxyCreate, ProxyUpdate, ProxyCheckResult, ProxyQualityCreate, ProxyQualityUpdate,
-    ProxyUsageHistoryCreate, ProxyUsageHistoryFilter
+    ProxyUsageHistoryCreate, ProxyUsageHistoryFilter, ProxyListResponse
 )
 from ..core.logging import logger
 import uuid
@@ -70,6 +70,38 @@ class ProxyService:
         
         logger.debug(f"获取代理列表, count: {len(proxies)}, status: {status}, country: {country}")
         return proxies
+
+    async def get_proxies_paginated(
+        self,
+        page: int = 1,
+        size: int = 20,
+        status: Optional[str] = None,
+        country: Optional[str] = None
+    ) -> ProxyListResponse:
+        """获取分页代理列表"""
+        # 构建查询条件
+        query = select(Proxy)
+        count_query = select(func.count(Proxy.id))
+        
+        if status:
+            query = query.filter(Proxy.status == status)
+            count_query = count_query.filter(Proxy.status == status)
+        if country:
+            query = query.filter(Proxy.country == country)
+            count_query = count_query.filter(Proxy.country == country)
+        
+        # 获取总数
+        total_result = await self.db.execute(count_query)
+        total = total_result.scalar() or 0
+        
+        # 获取分页数据
+        offset = (page - 1) * size
+        query = query.offset(offset).limit(size).order_by(desc(Proxy.created_at))
+        result = await self.db.execute(query)
+        proxies = result.scalars().all()
+        
+        logger.debug(f"获取分页代理列表, total: {total}, page: {page}, size: {size}")
+        return ProxyListResponse.create(proxies, total, page, size)
 
     async def get_proxy(self, proxy_id: str) -> Optional[Proxy]:
         """获取代理详情"""

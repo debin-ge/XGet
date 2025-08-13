@@ -1,6 +1,7 @@
 from pydantic import BaseModel, Field
-from typing import Optional, Dict, Any, List
+from typing import Optional, Dict, Any, List, Generic, TypeVar
 from datetime import datetime
+from .task import PaginatedResponse
 
 
 class ResultBase(BaseModel):
@@ -26,10 +27,15 @@ class ResultQuery(BaseModel):
     task_id: Optional[str] = None
     data_type: Optional[str] = None
     query: Optional[Dict[str, Any]] = None
-    skip: int = 0
-    limit: int = 100
+    page: int = Field(1, ge=1, description="页码")
+    size: int = Field(20, ge=1, le=100, description="每页数量")
 
 
-class ResultsResponse(BaseModel):
+class ResultsResponse(PaginatedResponse[ResultResponse]):
+    """抓取结果分页响应"""
+    pass
+
+# 保持向后兼容的简单响应
+class SimpleResultsResponse(BaseModel):
     total: int
     data: List[ResultResponse]

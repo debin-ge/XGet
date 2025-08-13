@@ -10,7 +10,8 @@ from ..schemas.proxy import (
     ProxyImport, ProxyImportResponse, ProxyImportResult,
     ProxyQualityResponse, ProxyQualityUpdate, ProxyUsageResult,
     ProxyUsageHistoryCreate, ProxyUsageHistoryResponse,
-    ProxyUsageHistoryListResponse, ProxyUsageHistoryFilter
+    ProxyUsageHistoryListResponse, ProxyUsageHistoryFilter,
+    ProxyListResponse, ProxyQualityListResponse
 )
 from ..services.proxy_service import ProxyService
 import csv
@@ -27,17 +28,17 @@ async def create_proxy(
     service = ProxyService(db)
     return await service.create_proxy(proxy)
 
-@router.get("/", response_model=List[ProxyResponse])
+@router.get("/", response_model=ProxyListResponse)
 async def get_proxies(
-    skip: int = 0, 
-    limit: int = 100, 
-    status: Optional[str] = None,
-    country: Optional[str] = None,
+    page: int = Query(1, ge=1, description="页码"),
+    size: int = Query(20, ge=1, le=100, description="每页数量"),
+    status: Optional[str] = Query(None, description="代理状态筛选"),
+    country: Optional[str] = Query(None, description="国家筛选"),
     db: AsyncSession = Depends(get_db)
 ):
     """获取代理列表"""
     service = ProxyService(db)
-    return await service.get_proxies(skip, limit, status, country)
+    return await service.get_proxies_paginated(page, size, status, country)
 
 @router.get("/available", response_model=List[ProxyResponse])
 async def get_available_proxies(

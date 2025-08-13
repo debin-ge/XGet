@@ -1,6 +1,28 @@
 from pydantic import BaseModel, Field
-from typing import Optional, List
+from typing import Optional, List, Generic, TypeVar
 from datetime import datetime
+
+T = TypeVar('T')
+
+class PaginatedResponse(BaseModel, Generic[T]):
+    """通用分页响应模式"""
+    items: List[T]
+    total: int
+    page: int
+    size: int
+    pages: int
+
+    @classmethod
+    def create(cls, items: List[T], total: int, page: int, size: int):
+        """创建分页响应"""
+        pages = (total + size - 1) // size if total > 0 else 0
+        return cls(
+            items=items,
+            total=total,
+            page=page,
+            size=size,
+            pages=pages
+        )
 
 
 class ProxyBase(BaseModel):
@@ -172,3 +194,12 @@ class ProxyUsageHistoryFilter(BaseModel):
     end_date: Optional[datetime] = None
     page: int = 1
     size: int = 20
+
+# 新增分页响应类型
+class ProxyListResponse(PaginatedResponse[ProxyResponse]):
+    """代理列表分页响应"""
+    pass
+
+class ProxyQualityListResponse(PaginatedResponse[ProxyQualityResponse]):
+    """代理质量列表分页响应"""
+    pass

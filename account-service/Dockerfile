@@ -19,8 +19,11 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# 安装Playwright浏览器
-RUN playwright install chromium --with-deps
+# 设置Playwright环境变量以使用无头模式
+ENV PLAYWRIGHT_BROWSERS_PATH=/ms-playwright
+
+# 只安装Playwright浏览器，不安装系统依赖（在代码中使用无头模式）
+RUN playwright install chromium
 
 # 复制应用代码
 COPY . .

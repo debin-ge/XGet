@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 from typing import List, Optional, Dict
 from ..db.database import get_db
-from ..schemas.task import TaskCreate, TaskUpdate, TaskResponse, TaskStatusResponse
+from ..schemas.task import TaskCreate, TaskUpdate, TaskResponse, TaskStatusResponse, TaskListResponse
 from ..schemas.result import ResultsResponse
 from ..services.task_service import TaskService
 from ..services.scraper_service import ScraperService
@@ -21,17 +21,17 @@ async def create_task(
     service = TaskService(db)
     return await service.create_task(task)
 
-@router.get("/", response_model=List[TaskResponse])
+@router.get("/", response_model=TaskListResponse)
 async def get_tasks(
-    skip: int = 0, 
-    limit: int = 100, 
-    status: Optional[str] = None,
-    task_type: Optional[str] = None,
+    page: int = Query(1, ge=1, description="页码"), 
+    size: int = Query(20, ge=1, le=100, description="每页数量"), 
+    status: Optional[str] = Query(None, description="任务状态筛选"),
+    task_type: Optional[str] = Query(None, description="任务类型筛选"),
     db: AsyncSession = Depends(get_db)
 ):
     """获取任务列表"""
     service = TaskService(db)
-    return await service.get_tasks(skip, limit, status, task_type)
+    return await service.get_tasks_paginated(page, size, status, task_type)
 
 @router.get("/{task_id}", response_model=TaskResponse)
 async def get_task(

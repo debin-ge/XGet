@@ -1,7 +1,29 @@
 from pydantic import BaseModel, Field
-from typing import Optional, Dict, Any, List
+from typing import Optional, Dict, Any, List, TypeVar, Generic
 from datetime import datetime
-import uuid
+import math
+
+T = TypeVar('T')
+
+class PaginatedResponse(BaseModel, Generic[T]):
+    """通用分页响应模式"""
+    items: List[T] = Field(description="数据列表")
+    total: int = Field(description="总记录数")
+    page: int = Field(description="当前页码")
+    size: int = Field(description="每页大小")
+    pages: int = Field(description="总页数")
+
+    @classmethod
+    def create(cls, items: List[T], total: int, page: int, size: int):
+        """创建分页响应"""
+        pages = math.ceil(total / size) if total > 0 else 1
+        return cls(
+            items=items,
+            total=total,
+            page=page,
+            size=size,
+            pages=pages
+        )
 
 
 class AccountBase(BaseModel):
@@ -52,3 +74,8 @@ class AccountLoginResponse(BaseModel):
     cookies_obtained: bool
     last_used: Optional[datetime] = None
     message: Optional[str] = None
+
+
+class AccountListResponse(PaginatedResponse[AccountResponse]):
+    """账户分页响应"""
+    pass

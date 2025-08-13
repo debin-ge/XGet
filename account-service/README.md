@@ -89,24 +89,30 @@ POST /api/v1/accounts
 #### 获取账号列表
 
 ```
-GET /api/v1/accounts?skip=0&limit=100&active=true
+GET /api/v1/accounts?page=1&size=20&active=true
 ```
 
 响应:
 ```json
-[
-  {
-    "id": "550e8400-e29b-41d4-a716-446655440000",
-    "username": "twitter_user",
-    "email": "user@example.com",
-    "login_method": "TWITTER",
-    "active": true,
-    "proxy_id": "550e8400-e29b-41d4-a716-446655440001",
-    "last_used": "2023-06-01T12:30:00",
-    "created_at": "2023-06-01T12:00:00",
-    "updated_at": "2023-06-01T12:30:00"
-  }
-]
+{
+  "items": [
+    {
+      "id": "550e8400-e29b-41d4-a716-446655440000",
+      "username": "twitter_user",
+      "email": "user@example.com",
+      "login_method": "TWITTER",
+      "active": true,
+      "proxy_id": "550e8400-e29b-41d4-a716-446655440001",
+      "last_used": "2023-06-01T12:30:00",
+      "created_at": "2023-06-01T12:00:00",
+      "updated_at": "2023-06-01T12:30:00"
+    }
+  ],
+  "total": 1,
+  "page": 1,
+  "size": 20,
+  "pages": 1
+}
 ```
 
 #### 获取单个账号
@@ -204,53 +210,65 @@ POST /api/v1/accounts/{account_id}/login
 #### 获取登录历史列表
 
 ```
-GET /api/v1/login-history?skip=0&limit=100&account_id={account_id}&status=SUCCESS
+GET /api/v1/login-history?page=1&size=20&account_id={account_id}&status=SUCCESS
 ```
 
 响应:
 ```json
-[
-  {
-    "id": "550e8400-e29b-41d4-a716-446655440002",
-    "account_id": "550e8400-e29b-41d4-a716-446655440000",
-    "proxy_id": "550e8400-e29b-41d4-a716-446655440001",
-    "login_time": "2023-06-01T13:30:00",
-    "status": "SUCCESS",
-    "cookies_count": 15,
-    "response_time": 5230
-  }
-]
+{
+  "items": [
+    {
+      "id": "550e8400-e29b-41d4-a716-446655440002",
+      "account_id": "550e8400-e29b-41d4-a716-446655440000",
+      "proxy_id": "550e8400-e29b-41d4-a716-446655440001",
+      "login_time": "2023-06-01T13:30:00",
+      "status": "SUCCESS",
+      "cookies_count": 15,
+      "response_time": 5230
+    }
+  ],
+  "total": 1,
+  "page": 1,
+  "size": 20,
+  "pages": 1
+}
 ```
 
 #### 获取单个账号的登录历史
 
 ```
-GET /api/v1/login-history/account/{account_id}?skip=0&limit=10
+GET /api/v1/login-history/account/{account_id}?page=1&size=20
 ```
 
 响应:
 ```json
-[
-  {
-    "id": "550e8400-e29b-41d4-a716-446655440002",
-    "account_id": "550e8400-e29b-41d4-a716-446655440000",
-    "proxy_id": "550e8400-e29b-41d4-a716-446655440001",
-    "login_time": "2023-06-01T13:30:00",
-    "status": "SUCCESS",
-    "cookies_count": 15,
-    "response_time": 5230
-  },
-  {
-    "id": "550e8400-e29b-41d4-a716-446655440003",
-    "account_id": "550e8400-e29b-41d4-a716-446655440000",
-    "proxy_id": "550e8400-e29b-41d4-a716-446655440001",
-    "login_time": "2023-06-01T12:30:00",
-    "status": "FAILED",
-    "error_msg": "登录失败，未获取到cookies",
-    "cookies_count": 0,
-    "response_time": 4500
-  }
-]
+{
+  "items": [
+    {
+      "id": "550e8400-e29b-41d4-a716-446655440002",
+      "account_id": "550e8400-e29b-41d4-a716-446655440000",
+      "proxy_id": "550e8400-e29b-41d4-a716-446655440001",
+      "login_time": "2023-06-01T13:30:00",
+      "status": "SUCCESS",
+      "cookies_count": 15,
+      "response_time": 5230
+    },
+    {
+      "id": "550e8400-e29b-41d4-a716-446655440003",
+      "account_id": "550e8400-e29b-41d4-a716-446655440000",
+      "proxy_id": "550e8400-e29b-41d4-a716-446655440001",
+      "login_time": "2023-06-01T12:30:00",
+      "status": "FAILED",
+      "error_msg": "登录失败，未获取到cookies",
+      "cookies_count": 0,
+      "response_time": 4500
+    }
+  ],
+  "total": 2,
+  "page": 1,
+  "size": 20,
+  "pages": 1
+}
 ```
 
 ## 使用示例

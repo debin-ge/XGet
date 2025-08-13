@@ -1,9 +1,9 @@
 from typing import List, Optional, Dict, Any
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
-from sqlalchemy import update, delete, desc
+from sqlalchemy import update, delete, desc, func
 from ..models.task import Task
-from ..schemas.task import TaskCreate, TaskUpdate
+from ..schemas.task import TaskCreate, TaskUpdate, TaskListResponse
 import uuid
 from datetime import datetime
 import httpx
@@ -71,6 +71,38 @@ class TaskService:
         query = query.offset(skip).limit(limit)
         result = await self.db.execute(query)
         return result.scalars().all()
+
+    async def get_tasks_paginated(
+        self,
+        page: int = 1,
+        size: int = 20,
+        status: Optional[str] = None,
+        task_type: Optional[str] = None
+    ) -> TaskListResponse:
+        """获取分页任务列表"""
+        # 构建查询条件
+        query = select(Task).order_by(desc(Task.created_at))
+        count_query = select(func.count(Task.id))
+        
+        if status:
+            query = query.filter(Task.status == status)
+            count_query = count_query.filter(Task.status == status)
+        if task_type:
+            query = query.filter(Task.task_type == task_type)
+            count_query = count_query.filter(Task.task_type == task_type)
+        
+        # 获取总数
+        total_result = await self.db.execute(count_query)
+        total = total_result.scalar() or 0
+        
+        # 获取分页数据
+        offset = (page - 1) * size
+        query = query.offset(offset).limit(size)
+        result = await self.db.execute(query)
+        tasks = result.scalars().all()
+        
+        logger.debug(f"获取分页任务列表, total: {total}, page: {page}, size: {size}")
+        return TaskListResponse.create(tasks, total, page, size)
 
     async def get_task(self, task_id: str) -> Optional[Task]:
         """获取任务详情"""
