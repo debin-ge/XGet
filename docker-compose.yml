@@ -1,6 +1,39 @@
 version: '3.8'
 
 services:
+  # API网关
+  api-gateway:
+    build:
+      context: ./api-gateway
+      dockerfile: Dockerfile
+    ports:
+      - "8000:8000"
+    environment:
+      - DEBUG=true
+      - LOG_LEVEL=INFO
+      - ACCOUNT_SERVICE_URL=http://account-service:8000
+      - PROXY_SERVICE_URL=http://proxy-service:8000
+      - SCRAPER_SERVICE_URL=http://scraper-service:8000
+      - USER_SERVICE_URL=http://user-service:8000
+      # - PROCESSING_SERVICE_URL=http://processing-service:8000
+      # - STORAGE_SERVICE_URL=http://storage-service:8000
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - JWT_SECRET_KEY=your-secret-key-here
+      - JWT_ALGORITHM=HS256
+      - JWT_ACCESS_TOKEN_EXPIRE_MINUTES=60
+    depends_on:
+      - redis
+      - account-service
+      - proxy-service
+      - scraper-service
+      - user-service
+      # - processing-service
+      # - storage-service
+    networks:
+      - xget-network
+    restart: unless-stopped
+
   # 账号管理服务
   account-service:
     build:
@@ -9,8 +42,9 @@ services:
     ports:
       - "8001:8000"
     environment:
-      - DEBUG=false
-      - LOG_LEVEL=INFO
+      - DEBUG=true
+      - LOG_LEVEL=DEBUG
+      # 确保数据库连接信息与PostgreSQL配置一致
       - POSTGRES_SERVER=postgres
       - POSTGRES_USER=postgres
       - POSTGRES_PASSWORD=postgres
@@ -31,8 +65,9 @@ services:
     ports:
       - "8002:8000"
     environment:
-      - DEBUG=false
-      - LOG_LEVEL=INFO
+      - DEBUG=true
+      - LOG_LEVEL=DEBUG
+      # 确保数据库连接信息与PostgreSQL配置一致
       - POSTGRES_SERVER=postgres
       - POSTGRES_USER=postgres
       - POSTGRES_PASSWORD=postgres
@@ -52,8 +87,9 @@ services:
     ports:
       - "8003:8000"
     environment:
-      - DEBUG=false
-      - LOG_LEVEL=INFO
+      - DEBUG=true
+      - LOG_LEVEL=DEBUG
+      # 添加PostgreSQL数据库配置
       - POSTGRES_SERVER=postgres
       - POSTGRES_USER=postgres
       - POSTGRES_PASSWORD=postgres
@@ -67,6 +103,112 @@ services:
       - postgres
       - mongodb
       - kafka
+    networks:
+      - xget-network
+    restart: unless-stopped
+
+  # 数据处理服务
+  # processing-service:
+  #   build: ./processing-service
+  #   ports:
+  #     - "8004:8000"
+  #   environment:
+  #     - POSTGRES_SERVER=postgres
+  #     - POSTGRES_USER=postgres
+  #     - POSTGRES_PASSWORD=postgres
+  #     - POSTGRES_DB=processing_db
+  #     - DATABASE_URL=postgresql+asyncpg://postgres:postgres@postgres/processing_db
+  #     - MONGODB_URI=mongodb://mongodb:27017/processing
+  #     - KAFKA_BOOTSTRAP_SERVERS=kafka:9092
+  #     - KAFKA_INPUT_TOPIC=raw-data
+  #     - KAFKA_OUTPUT_TOPIC=processed-data
+  #     - REDIS_HOST=redis
+  #     - REDIS_PORT=6379
+  #     - STORAGE_SERVICE_URL=http://storage-service:8000/api/v1
+  #     - SCRAPER_SERVICE_URL=http://scraper-service:8000/api/v1
+  #   depends_on:
+  #     - postgres
+  #     - mongodb
+  #     - kafka
+  #     - redis
+  #   networks:
+  #     - xget-network
+  #   restart: unless-stopped
+
+  # 数据存储服务
+  # storage-service:
+  #   build: ./storage-service
+  #   ports:
+  #     - "8005:8000"
+  #   environment:
+  #     - POSTGRES_SERVER=postgres
+  #     - POSTGRES_USER=postgres
+  #     - POSTGRES_PASSWORD=postgres
+  #     - POSTGRES_DB=storage_db
+  #     - DATABASE_URL=postgresql+asyncpg://postgres:postgres@postgres/storage_db
+  #     - MONGODB_URI=mongodb://mongodb:27017/storage
+  #     - KAFKA_BOOTSTRAP_SERVERS=kafka:9092
+  #     - KAFKA_INPUT_TOPIC=processed-data
+  #     - REDIS_HOST=redis
+  #     - REDIS_PORT=6379
+  #     - MINIO_ROOT_USER=minioadmin
+  #     - MINIO_ROOT_PASSWORD=minioadmin
+  #     - MINIO_ENDPOINT=minio:9000
+  #     - ELASTICSEARCH_HOST=elasticsearch
+  #     - ELASTICSEARCH_PORT=9200
+  #     - PROCESSING_SERVICE_URL=http://processing-service:8000/api/v1
+  #   depends_on:
+  #     - postgres
+  #     - mongodb
+  #     - kafka
+  #     - redis
+  #     - minio
+  #     - elasticsearch
+  #   networks:
+  #     - xget-network
+  #   restart: unless-stopped
+
+  # 认证服务 (未实现)
+  # auth-service:
+  #   build: ./auth-service
+  #   ports:
+  #     - "8006:8000"
+  #   environment:
+  #     - POSTGRES_SERVER=postgres
+  #     - POSTGRES_USER=postgres
+  #     - POSTGRES_PASSWORD=postgres
+  #     - POSTGRES_DB=auth_db
+  #   depends_on:
+  #     - postgres
+  #     - redis
+  #   networks:
+  #     - xget-network
+  #   restart: unless-stopped
+
+  # 用户管理服务
+  user-service:
+    build:
+      context: ./user-service
+      dockerfile: Dockerfile
+    ports:
+      - "8007:8000"
+    environment:
+      - DEBUG=true
+      - LOG_LEVEL=DEBUG
+      - POSTGRES_SERVER=postgres
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
+      - POSTGRES_DB=user_db
+      - DATABASE_URL=postgresql://postgres:postgres@postgres/user_db
+      - REDIS_URL=redis://redis:6379/0
+      - SECRET_KEY=your-secret-key-here
+      - ACCESS_TOKEN_EXPIRE_MINUTES=30
+      - REFRESH_TOKEN_EXPIRE_DAYS=7
+      - ACCOUNT_SERVICE_URL=http://account-service:8000
+      - PROXY_SERVICE_URL=http://proxy-service:8000
+    depends_on:
+      - postgres
+      - redis
     networks:
       - xget-network
     restart: unless-stopped
@@ -97,6 +239,17 @@ services:
       - xget-network
     restart: unless-stopped
 
+  # Redis缓存
+  redis:
+    image: redis:7
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    networks:
+      - xget-network
+    restart: unless-stopped
+
   # Kafka消息队列
   kafka:
     image: bitnami/kafka:3.5
@@ -118,6 +271,76 @@ services:
       - xget-network
     restart: unless-stopped
 
+  # Kafka可视化工具kafdrop
+  kafdrop:
+    image: obsidiandynamics/kafdrop:latest
+    ports:
+      - "9000:9000"
+    environment:
+      - KAFKA_BROKERCONNECT=kafka:9092
+    volumes:
+      - kafdrop-data:/tmp/kafdrop
+    networks:
+      - xget-network
+    restart: unless-stopped
+
+  # MinIO对象存储
+  # minio:
+  #   image: minio/minio
+  #   ports:
+  #     - "9000:9000"
+  #     - "9001:9001"
+  #   environment:
+  #     - MINIO_ROOT_USER=minioadmin
+  #     - MINIO_ROOT_PASSWORD=minioadmin
+  #   volumes:
+  #     - minio-data:/data
+  #   command: server /data --console-address ":9001"
+  #   networks:
+  #     - xget-network
+  #   restart: unless-stopped
+
+  # Elasticsearch搜索引擎
+  # elasticsearch:
+  #   image: elasticsearch:8.10.4
+  #   ports:
+  #     - "9200:9200"
+  #     - "9300:9300"
+  #   environment:
+  #     - discovery.type=single-node
+  #     - xpack.security.enabled=false
+  #     - "ES_JAVA_OPTS=-Xms512m -Xmx512m"
+  #   volumes:
+  #     - elasticsearch-data:/usr/share/elasticsearch/data
+  #   networks:
+  #     - xget-network
+  #   restart: unless-stopped
+
+  # Prometheus监控 (未实现)
+  # prometheus:
+  #   image: prom/prometheus
+  #   ports:
+  #     - "9090:9090"
+  #   volumes:
+  #     - ./prometheus:/etc/prometheus
+  #     - prometheus-data:/prometheus
+  #   networks:
+  #     - xget-network
+  #   restart: unless-stopped
+
+  # Grafana仪表盘 (未实现)
+  # grafana:
+  #   image: grafana/grafana
+  #   ports:
+  #     - "3000:3000"
+  #   volumes:
+  #     - grafana-data:/var/lib/grafana
+  #   depends_on:
+  #     - prometheus
+  #   networks:
+  #     - xget-network
+  #   restart: unless-stopped
+
 networks:
   xget-network:
     driver: bridge
@@ -125,4 +348,10 @@ networks:
 volumes:
   postgres-data:
   mongodb-data:
+  redis-data:
   kafka-data:
+  kafdrop-data:
+  # minio-data:
+  # elasticsearch-data:
+  # prometheus-data:
+  # grafana-data:
