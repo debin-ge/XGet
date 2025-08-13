@@ -7,7 +7,7 @@ from ..db.database import get_db
 from ..models.user import User
 from ..schemas.user import (
     UserCreate, UserUpdate, User as UserSchema, UserWithRoles,
-    UserPasswordUpdate, UserPreferences, UserStatus, UserLogin
+    UserPasswordUpdate, UserPreferences, UserStatus, UserLogin, UserLoginResponse
 )
 from ..services.user_service import UserService
 from ..core.security import get_current_user, get_current_active_user, check_permission
@@ -33,7 +33,7 @@ async def register_user(
         )
 
 
-@router.post("/login")
+@router.post("/login", response_model=UserLoginResponse)
 async def login_user(
     user_data: UserLogin,
     request: Request,
