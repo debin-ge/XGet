@@ -6,6 +6,7 @@ api_router = APIRouter()
 # 用户管理服务路由
 api_router.include_router(user.router, prefix="/users", tags=["users"])
 api_router.include_router(user.router, prefix="/roles", tags=["roles"])
+api_router.include_router(user.router, prefix="/auth", tags=["auth"])
 
 # 账号管理服务路由
 api_router.include_router(account.router, prefix="/accounts", tags=["accounts"])

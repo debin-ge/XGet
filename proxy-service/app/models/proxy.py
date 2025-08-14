@@ -51,7 +51,8 @@ class ProxyUsageHistory(Base):
     
     id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
     proxy_id = Column(String, ForeignKey("proxies.id", ondelete="CASCADE"))
-    user_id = Column(String, nullable=True)  # 使用用户ID
+    account_id = Column(String, nullable=True)  # 使用账户ID
+    task_id = Column(String, nullable=True)  # 任务ID
     service_name = Column(String, nullable=True)  # 使用服务名称
     success = Column(String, default="SUCCESS")  # SUCCESS, FAILED, TIMEOUT
     response_time = Column(Integer, nullable=True)  # 响应时间（毫秒）

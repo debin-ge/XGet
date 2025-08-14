@@ -156,9 +156,14 @@ async def get_task_results(
         limit=limit
     )
     
-    return ResultsResponse(
+    # 计算页码
+    page = (skip // limit) + 1 if limit > 0 else 1
+    
+    return ResultsResponse.create(
+        items=results["data"],
         total=results["total"],
-        data=results["data"]
+        page=page,
+        size=limit
     )
 
 @router.post("/batch", response_model=List[TaskResponse])
@@ -198,9 +203,14 @@ async def search_results(
         limit=limit
     )
     
-    return ResultsResponse(
+    # 计算页码
+    page = (skip // limit) + 1 if limit > 0 else 1
+    
+    return ResultsResponse.create(
+        items=results["data"],
         total=results["total"],
-        data=results["data"]
+        page=page,
+        size=limit
     )
 
 @router.post("/export/{task_id}")

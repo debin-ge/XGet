@@ -588,6 +588,7 @@ class ProxyService:
             id=str(uuid.uuid4()),
             proxy_id=history_data.proxy_id,
             user_id=history_data.user_id,
+            task_id=history_data.task_id,
             service_name=history_data.service_name,
             success=history_data.success,
             response_time=history_data.response_time
@@ -618,8 +619,8 @@ class ProxyService:
         # 应用过滤条件
         if filter_data.proxy_id:
             query = query.filter(ProxyUsageHistory.proxy_id == filter_data.proxy_id)
-        if filter_data.user_id:
-            query = query.filter(ProxyUsageHistory.user_id == filter_data.user_id)
+        if filter_data.account_id:
+            query = query.filter(ProxyUsageHistory.account_id == filter_data.account_id)
         if filter_data.service_name:
             query = query.filter(ProxyUsageHistory.service_name == filter_data.service_name)
         if filter_data.success:
@@ -700,7 +701,7 @@ class ProxyService:
         self, 
         proxy_id: str, 
         success: bool,
-        user_id: Optional[str] = None,
+        account_id: Optional[str] = None,
         service_name: Optional[str] = None,
         response_time: Optional[int] = None
     ) -> Tuple[Optional[Proxy], Optional[ProxyQuality], Optional[ProxyUsageHistory]]:
@@ -716,7 +717,7 @@ class ProxyService:
         # 创建使用历史记录
         history_data = ProxyUsageHistoryCreate(
             proxy_id=proxy_id,
-            user_id=user_id,
+            account_id=account_id,
             service_name=service_name,
             success=success_status,
             response_time=response_time
@@ -726,3 +727,124 @@ class ProxyService:
         
         logger.info(f"记录代理使用情况（含历史）成功, proxy_id: {proxy_id}, success: {success}, history_id: {history.id}")
         return proxy, quality, history
+    
+    async def get_proxies_quality_info(
+        self, 
+        page: int = 1, 
+        size: int = 20, 
+        status: Optional[str] = None,
+        country: Optional[str] = None,
+        min_quality_score: Optional[float] = None,
+        sort_by: str = "quality_score",
+        sort_order: str = "desc"
+    ) -> tuple[List, int]:
+        """获取代理质量信息列表（带分页）
+        
+        Args:
+            page: 页码
+            size: 每页数量
+            status: 代理状态筛选
+            country: 国家筛选
+            min_quality_score: 最小质量分数筛选
+            sort_by: 排序字段 (quality_score, total_usage, success_rate, last_used)
+            sort_order: 排序方向 (asc, desc)
+        
+        Returns:
+            tuple: (代理质量信息列表, 总数量)
+        """
+        try:
+            # 构建查询 - 联合查询代理和质量信息
+            query = select(Proxy, ProxyQuality).outerjoin(
+                ProxyQuality, Proxy.id == ProxyQuality.proxy_id
+            )
+            
+            # 添加筛选条件
+            conditions = []
+            if status:
+                conditions.append(Proxy.status == status)
+            if country:
+                conditions.append(Proxy.country == country)
+            if min_quality_score is not None:
+                conditions.append(ProxyQuality.quality_score >= min_quality_score)
+            
+            if conditions:
+                query = query.where(and_(*conditions))
+            
+            # 排序
+            if sort_by == "quality_score":
+                order_col = ProxyQuality.quality_score
+            elif sort_by == "total_usage":
+                order_col = ProxyQuality.total_usage
+            elif sort_by == "success_rate":
+                order_col = Proxy.success_rate
+            elif sort_by == "last_used":
+                order_col = ProxyQuality.last_used
+            else:
+                order_col = ProxyQuality.quality_score
+            
+            if sort_order.lower() == "desc":
+                query = query.order_by(order_col.desc().nulls_last())
+            else:
+                query = query.order_by(order_col.asc().nulls_last())
+            
+            # 获取总数
+            count_query = select(func.count()).select_from(
+                query.subquery()
+            )
+            total_result = await self.db.execute(count_query)
+            total = total_result.scalar()
+            
+            # 分页
+            offset = (page - 1) * size
+            query = query.offset(offset).limit(size)
+            
+            # 执行查询
+            result = await self.db.execute(query)
+            rows = result.all()
+            
+            # 构造响应数据
+            quality_info_list = []
+            for proxy, quality in rows:
+                # 如果没有质量记录，创建默认值
+                if quality is None:
+                    quality_data = {
+                        "total_usage": 0,
+                        "success_count": 0,
+                        "quality_score": 0.8,
+                        "last_used": None
+                    }
+                else:
+                    quality_data = {
+                        "total_usage": quality.total_usage,
+                        "success_count": quality.success_count,
+                        "quality_score": quality.quality_score,
+                        "last_used": quality.last_used
+                    }
+                
+                # 构造质量信息响应
+                quality_info = {
+                    "proxy_id": proxy.id,
+                    "ip": proxy.ip,
+                    "port": proxy.port,
+                    "proxy_type": proxy.type,
+                    "total_usage": quality_data["total_usage"],
+                    "success_count": quality_data["success_count"],
+                    "success_rate": proxy.success_rate,
+                    "quality_score": quality_data["quality_score"],
+                    "last_used": quality_data["last_used"],
+                    "status": proxy.status,
+                    "country": proxy.country,
+                    "city": proxy.city,
+                    "isp": proxy.isp,
+                    "latency": proxy.latency,
+                    "created_at": proxy.created_at,
+                    "updated_at": proxy.updated_at
+                }
+                
+                quality_info_list.append(quality_info)
+            
+            return quality_info_list, total
+            
+        except Exception as e:
+            logger.error(f"Error getting proxies quality info: {str(e)}")
+            return [], 0

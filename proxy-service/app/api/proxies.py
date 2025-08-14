@@ -11,7 +11,8 @@ from ..schemas.proxy import (
     ProxyQualityResponse, ProxyQualityUpdate, ProxyUsageResult,
     ProxyUsageHistoryCreate, ProxyUsageHistoryResponse,
     ProxyUsageHistoryListResponse, ProxyUsageHistoryFilter,
-    ProxyListResponse, ProxyQualityListResponse
+    ProxyListResponse, ProxyQualityListResponse,
+    ProxyQualityInfoResponse, ProxyQualityInfoListResponse
 )
 from ..services.proxy_service import ProxyService
 import csv
@@ -40,18 +41,55 @@ async def get_proxies(
     service = ProxyService(db)
     return await service.get_proxies_paginated(page, size, status, country)
 
-@router.get("/available", response_model=List[ProxyResponse])
-async def get_available_proxies(
-    limit: int = 10,
-    country: Optional[str] = None,
-    max_latency: Optional[int] = None,
-    min_success_rate: Optional[float] = None,
-    min_quality_score: Optional[float] = None,
+@router.get("/quality-info", response_model=ProxyQualityInfoListResponse)
+async def get_proxies_quality_info(
+    page: int = Query(1, ge=1, description="页码"),
+    size: int = Query(20, ge=1, le=100, description="每页数量"),
+    status: Optional[str] = Query(None, description="代理状态筛选"),
+    country: Optional[str] = Query(None, description="国家筛选"),
+    min_quality_score: Optional[float] = Query(None, ge=0, le=1, description="最小质量分数筛选"),
+    sort_by: str = Query("quality_score", description="排序字段 (quality_score, total_usage, success_rate, last_used)"),
+    sort_order: str = Query("desc", description="排序方向 (asc, desc)"),
     db: AsyncSession = Depends(get_db)
 ):
-    """获取可用代理"""
+    """获取代理质量信息列表（包含IP+port、检测成功率、使用次数、成功次数、质量分数、最近使用时间等）"""
     service = ProxyService(db)
-    return await service.get_available_proxies(limit, country, max_latency, min_success_rate, min_quality_score)
+    
+    # 验证排序字段
+    valid_sort_fields = ["quality_score", "total_usage", "success_rate", "last_used"]
+    if sort_by not in valid_sort_fields:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Invalid sort_by field. Must be one of: {', '.join(valid_sort_fields)}"
+        )
+    
+    # 验证排序方向
+    if sort_order.lower() not in ["asc", "desc"]:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid sort_order. Must be 'asc' or 'desc'"
+        )
+    
+    quality_info_list, total = await service.get_proxies_quality_info(
+        page=page,
+        size=size,
+        status=status,
+        country=country,
+        min_quality_score=min_quality_score,
+        sort_by=sort_by,
+        sort_order=sort_order
+    )
+    
+    # 计算总页数
+    pages = (total + size - 1) // size if total > 0 else 0
+    
+    return ProxyQualityInfoListResponse(
+        total=total,
+        items=quality_info_list,
+        page=page,
+        size=size,
+        pages=pages
+    )
 
 @router.get("/{proxy_id}", response_model=ProxyResponse)
 async def get_proxy(
@@ -108,113 +146,6 @@ async def check_proxies(
         active=active_count,
         inactive=inactive_count,
         results=results
-    )
-
-@router.post("/import", response_model=ProxyImportResponse)
-async def import_proxies(
-    import_data: ProxyImport,
-    db: AsyncSession = Depends(get_db)
-):
-    """批量导入代理"""
-    service = ProxyService(db)
-    proxies = await service.import_proxies(import_data.proxies, import_data.check_availability)
-    
-    active_count = sum(1 for p in proxies if p.status == "ACTIVE")
-    inactive_count = len(proxies) - active_count
-    
-    results = [
-        ProxyImportResult(
-            id=p.id,
-            type=p.type,
-            ip=p.ip,
-            status=p.status
-        ) for p in proxies
-    ]
-    
-    return ProxyImportResponse(
-        total=len(import_data.proxies),
-        imported=len(proxies),
-        active=active_count,
-        inactive=inactive_count,
-        proxies=results
-    )
-
-@router.post("/import/file", response_model=ProxyImportResponse)
-async def import_proxies_from_file(
-    file: UploadFile = File(...),
-    check_availability: bool = True,
-    db: AsyncSession = Depends(get_db)
-):
-    """从文件导入代理
-    
-    文件格式:
-    type|ip|port|username|password|country|city
-    SOCKS5|192.168.1.1|1080|user|pass|US|New York
-    HTTP|192.168.1.2|8080||||||
-    """
-    service = ProxyService(db)
-    proxies_data = []
-    
-    content = await file.read()
-    text = content.decode('utf-8')
-    
-    # 支持CSV和自定义格式
-    if file.filename.endswith('.csv'):
-        reader = csv.reader(io.StringIO(text))
-        next(reader, None)  # 跳过标题行
-        for row in reader:
-            if len(row) >= 3:
-                proxy_data = ProxyCreate(
-                    type=row[0],
-                    ip=row[1],
-                    port=int(row[2]),
-                    username=row[3] if len(row) > 3 and row[3] else None,
-                    password=row[4] if len(row) > 4 and row[4] else None,
-                    country=row[5] if len(row) > 5 and row[5] else None,
-                    city=row[6] if len(row) > 6 and row[6] else None
-                )
-                proxies_data.append(proxy_data)
-    else:
-        # 自定义格式：type|ip|port|username|password|country|city
-        for line in text.splitlines():
-            line = line.strip()
-            if not line or line.startswith('#'):
-                continue
-                
-            parts = line.split('|')
-            if len(parts) >= 3:
-                proxy_data = ProxyCreate(
-                    type=parts[0],
-                    ip=parts[1],
-                    port=int(parts[2]),
-                    username=parts[3] if len(parts) > 3 and parts[3] else None,
-                    password=parts[4] if len(parts) > 4 and parts[4] else None,
-                    country=parts[5] if len(parts) > 5 and parts[5] else None,
-                    city=parts[6] if len(parts) > 6 and parts[6] else None
-                )
-                proxies_data.append(proxy_data)
-    
-    # 导入代理
-    proxies = await service.import_proxies(proxies_data, check_availability)
-    
-    active_count = sum(1 for p in proxies if p.status == "ACTIVE")
-    inactive_count = len(proxies) - active_count
-    
-    results = [
-        ProxyImportResult(
-            id=p.id,
-            type=p.type,
-            ip=p.ip,
-            status=p.status
-        ) for p in proxies
-    ]
-    
-    return ProxyImportResponse(
-        total=len(proxies_data),
-        imported=len(proxies),
-        active=active_count,
-        inactive=inactive_count,
-        proxies=results
     )
 
 @router.post("/{proxy_id}/check", response_model=ProxyCheckResult)
@@ -324,7 +255,7 @@ async def rotate_proxy(
 async def record_proxy_usage(
     proxy_id: str,
     success: bool,
-    user_id: Optional[str] = None,
+    account_id: Optional[str] = None,
     service_name: Optional[str] = None,
     response_time: Optional[int] = None,
     db: AsyncSession = Depends(get_db)
@@ -336,7 +267,7 @@ async def record_proxy_usage(
     proxy, quality, history = await service.record_proxy_usage_with_history(
         proxy_id=proxy_id,
         success=success,
-        user_id=user_id,
+        account_id=account_id,
         service_name=service_name,
         response_time=response_time
     )
@@ -435,7 +366,7 @@ async def create_proxy_usage_history(
 @router.get("/{proxy_id}/usage/history", response_model=ProxyUsageHistoryListResponse)
 async def get_proxy_usage_history_list(
     proxy_id: str,
-    user_id: Optional[str] = None,
+    account_id: Optional[str] = None,
     service_name: Optional[str] = None,
     success: Optional[str] = None,
     start_date: Optional[datetime] = None,
@@ -454,7 +385,7 @@ async def get_proxy_usage_history_list(
     
     filter_data = ProxyUsageHistoryFilter(
         proxy_id=proxy_id,
-        user_id=user_id,
+        account_id=account_id,
         service_name=service_name,
         success=success,
         start_date=start_date,
@@ -464,12 +395,16 @@ async def get_proxy_usage_history_list(
     )
     
     histories, total = await service.get_usage_history_list(filter_data)
+
+    # 计算总页数
+    pages = (total + size - 1) // size if total > 0 else 0
     
     return ProxyUsageHistoryListResponse(
         total=total,
         items=histories,
         page=page,
-        size=size
+        size=size,
+        pages=pages
     )
 
 @router.get("/usage/history/{history_id}", response_model=ProxyUsageHistoryResponse)
@@ -507,7 +442,7 @@ async def get_proxy_usage_statistics(
 async def record_proxy_usage_with_history(
     proxy_id: str,
     success: bool,
-    user_id: Optional[str] = None,
+    account_id: Optional[str] = None,
     service_name: Optional[str] = None,
     response_time: Optional[int] = None,
     db: AsyncSession = Depends(get_db)
@@ -518,7 +453,7 @@ async def record_proxy_usage_with_history(
     proxy, quality, history = await service.record_proxy_usage_with_history(
         proxy_id=proxy_id,
         success=success,
-        user_id=user_id,
+        account_id=account_id,
         service_name=service_name,
         response_time=response_time
     )
@@ -537,7 +472,7 @@ async def record_proxy_usage_with_history(
 
 @router.get("/usage/history", response_model=ProxyUsageHistoryListResponse)
 async def get_all_usage_history(
-    user_id: Optional[str] = None,
+    account_id: Optional[str] = None,
     service_name: Optional[str] = None,
     success: Optional[str] = None,
     start_date: Optional[datetime] = None,
@@ -550,7 +485,7 @@ async def get_all_usage_history(
     service = ProxyService(db)
     
     filter_data = ProxyUsageHistoryFilter(
-        user_id=user_id,
+        account_id=account_id,
         service_name=service_name,
         success=success,
         start_date=start_date,
@@ -560,10 +495,14 @@ async def get_all_usage_history(
     )
     
     histories, total = await service.get_usage_history_list(filter_data)
+
+        # 计算总页数
+    pages = (total + size - 1) // size if total > 0 else 0
     
     return ProxyUsageHistoryListResponse(
         total=total,
         items=histories,
         page=page,
-        size=size
+        size=size,
+        pages=pages
     )

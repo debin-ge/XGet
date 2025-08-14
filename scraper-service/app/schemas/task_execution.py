@@ -30,7 +30,7 @@ class TaskExecutionResponse(TaskExecutionBase):
     error_message: Optional[str] = None
 
     class Config:
-        from_attributes = True
+        from_attributes = True 
 
 # 新增分页响应类型
 class TaskExecutionListResponse(PaginatedResponse[TaskExecutionResponse]):

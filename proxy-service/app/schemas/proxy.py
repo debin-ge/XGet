@@ -158,7 +158,8 @@ class ProxyUsageResult(BaseModel):
 # 代理使用历史记录相关的schema
 class ProxyUsageHistoryCreate(BaseModel):
     proxy_id: str
-    user_id: Optional[str] = None
+    task_id: Optional[str] = None
+    account_id: Optional[str] = None
     service_name: Optional[str] = None
     success: str = "SUCCESS"  # SUCCESS, FAILED, TIMEOUT
     response_time: Optional[int] = None
@@ -167,7 +168,8 @@ class ProxyUsageHistoryCreate(BaseModel):
 class ProxyUsageHistoryResponse(BaseModel):
     id: str
     proxy_id: str
-    user_id: Optional[str] = None
+    account_id: Optional[str] = None
+    task_id: Optional[str] = None
     service_name: Optional[str] = None
     success: str
     response_time: Optional[int] = None
@@ -178,16 +180,9 @@ class ProxyUsageHistoryResponse(BaseModel):
         from_attributes = True
 
 
-class ProxyUsageHistoryListResponse(BaseModel):
-    total: int
-    items: List[ProxyUsageHistoryResponse]
-    page: int
-    size: int
-
-
 class ProxyUsageHistoryFilter(BaseModel):
     proxy_id: Optional[str] = None
-    user_id: Optional[str] = None
+    account_id: Optional[str] = None
     service_name: Optional[str] = None
     success: Optional[str] = None
     start_date: Optional[datetime] = None
@@ -202,4 +197,41 @@ class ProxyListResponse(PaginatedResponse[ProxyResponse]):
 
 class ProxyQualityListResponse(PaginatedResponse[ProxyQualityResponse]):
     """代理质量列表分页响应"""
+    pass
+
+
+class ProxyQualityInfoResponse(BaseModel):
+    """代理质量信息综合响应 - 包含IP+port、检测成功率、使用次数、成功次数、质量分数、最近使用时间"""
+    # 代理基本信息
+    proxy_id: str
+    ip: str
+    port: int
+    proxy_type: str
+    
+    # 质量信息
+    total_usage: int = Field(description="总使用次数")
+    success_count: int = Field(description="成功次数")
+    success_rate: float = Field(description="检测成功率")
+    quality_score: float = Field(description="质量分数")
+    last_used: Optional[datetime] = Field(description="最近使用时间")
+    
+    # 其他信息
+    status: str = Field(description="代理状态")
+    country: Optional[str] = Field(description="国家")
+    city: Optional[str] = Field(description="城市")
+    isp: Optional[str] = Field(description="ISP")
+    latency: Optional[int] = Field(description="延迟(毫秒)")
+    created_at: datetime = Field(description="创建时间")
+    updated_at: Optional[datetime] = Field(description="更新时间")
+
+    class Config:
+        from_attributes = True
+
+
+class ProxyQualityInfoListResponse(PaginatedResponse[ProxyQualityInfoResponse]):
+    """代理质量信息列表分页响应"""
+    pass
+
+class ProxyUsageHistoryListResponse(PaginatedResponse[ProxyUsageHistoryResponse]):
+    """代理使用历史记录列表分页响应"""
     pass

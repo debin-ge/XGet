@@ -12,9 +12,9 @@ class LoginHistoryResponse(BaseModel):
     cookies_count: int = 0
     response_time: Optional[int] = None  # milliseconds
     login_time: datetime
-
+    
     class Config:
-        from_attributes = True
+        from_attributes = True 
 
 class LoginHistoryListResponse(PaginatedResponse[LoginHistoryResponse]):
     """登录历史分页响应"""

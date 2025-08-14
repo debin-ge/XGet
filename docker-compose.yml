@@ -88,7 +88,7 @@ services:
       - "8003:8000"
     environment:
       - DEBUG=true
-      - LOG_LEVEL=DEBUG
+      - LOG_LEVEL=INFO
       # 添加PostgreSQL数据库配置
       - POSTGRES_SERVER=postgres
       - POSTGRES_USER=postgres

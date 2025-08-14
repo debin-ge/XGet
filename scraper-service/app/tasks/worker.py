@@ -27,7 +27,6 @@ class TaskWorker:
         self.stop_tasks = set()  # 需要停止的任务ID集合
         self.proxy_client = ProxyClient()  # 代理客户端
         self.account_client = AccountClient()  # 账号客户端
-        self.db = get_db()
 
     async def start(self):
         """启动工作器"""
@@ -381,61 +380,66 @@ class TaskWorker:
         error_msg: Optional[str] = None
     ):
         """更新任务状态"""
-        try:
-            
-            update_data = {
-                "status": status,
-                "progress": progress,
-                "updated_at": datetime.now()
-            }
-            
-            if result_count > 0:
-                update_data["result_count"] = result_count
+        async for db in get_db():
+            try:
+                update_data = {
+                    "status": status,
+                    "progress": progress,
+                    "updated_at": datetime.now()
+                }
                 
-            if error_msg:
-                # 截断错误信息，防止超出数据库字段长度
-                if len(error_msg) > 500:
-                    error_msg = error_msg[:497] + "..."
-                update_data["error_message"] = error_msg
-            
-            # 如果状态变为RUNNING，设置started_at
-            if status == "RUNNING":
-                update_data["started_at"] = datetime.now()
+                if result_count > 0:
+                    update_data["result_count"] = result_count
+                    
+                if error_msg:
+                    # 截断错误信息，防止超出数据库字段长度
+                    if len(error_msg) > 500:
+                        error_msg = error_msg[:497] + "..."
+                    update_data["error_message"] = error_msg
                 
-            # 如果状态变为COMPLETED或FAILED，设置completed_at
-            if status in ["COMPLETED", "FAILED", "STOPPED"]:
-                update_data["completed_at"] = datetime.now()
-            
-            await self.db.execute(
-                update(Task)
-                .where(Task.id == task_id)
-                .values(**update_data)
-            )
-            await self.db.commit()
-            logger.info(f"任务状态已更新: {task_id} - {status} - {progress}")
-        except Exception as e:
-            logger.error(f"更新任务状态失败: {task_id} - {e}")
-            await self.db.rollback()
+                # 如果状态变为RUNNING，设置started_at
+                if status == "RUNNING":
+                    update_data["started_at"] = datetime.now()
+                    
+                # 如果状态变为COMPLETED或FAILED，设置completed_at
+                if status in ["COMPLETED", "FAILED", "STOPPED"]:
+                    update_data["completed_at"] = datetime.now()
+                
+                await db.execute(
+                    update(Task)
+                    .where(Task.id == task_id)
+                    .values(**update_data)
+                )
+                await db.commit()
+                logger.info(f"任务状态已更新: {task_id} - {status} - {progress}")
+                break
+            except Exception as e:
+                logger.error(f"更新任务状态失败: {task_id} - {e}")
+                await db.rollback()
+                break
 
     async def update_execution_status(self, task_id: str, status: str, error_msg: Optional[str] = None):
         """更新任务执行记录状态"""
-        try:
-            execution_service = TaskExecutionService(self.db)
-            executions = await execution_service.get_executions_by_task(task_id)
-            if executions:
-                latest_execution = executions[0]  # 最新的执行记录
-                await execution_service.update_execution(
-                    latest_execution.id,
-                    TaskExecutionUpdate(
-                        status=status,
-                        completed_at=datetime.now(),
-                        error_message=error_msg
+        async for db in get_db():
+            try:
+                execution_service = TaskExecutionService(db)
+                executions = await execution_service.get_executions_by_task(task_id)
+                if executions:
+                    latest_execution = executions[0]  # 最新的执行记录
+                    await execution_service.update_execution(
+                        latest_execution.id,
+                        TaskExecutionUpdate(
+                            status=status,
+                            completed_at=datetime.now(),
+                            error_message=error_msg
+                        )
                     )
-                )
-                await self.db.commit()
-        except Exception as e:
-            logger.error(f"更新任务执行记录状态失败: {task_id} - {e}")
-            await self.db.rollback()
+                    await db.commit()
+                break
+            except Exception as e:
+                logger.error(f"更新任务执行记录状态失败: {task_id} - {e}")
+                await db.rollback()
+                break
 
 
 task_worker = TaskWorker()
