@@ -8,6 +8,7 @@ from ..schemas.proxy import (
     ProxyUsageHistoryCreate, ProxyUsageHistoryFilter, ProxyListResponse
 )
 from ..core.logging import logger
+from .ip_geolocation_service import ip_geolocation_service
 import uuid
 from datetime import datetime, timedelta
 import aiohttp
@@ -21,6 +22,14 @@ class ProxyService:
 
     async def create_proxy(self, proxy_data: ProxyCreate) -> Proxy:
         """创建代理"""
+        # 根据IP地址获取国家、城市和ISP信息
+        try:
+            country, city, isp = await ip_geolocation_service.get_ip_info(proxy_data.ip)
+            logger.info(f"获取IP地理位置信息成功 - IP: {proxy_data.ip}, Country: {country}, City: {city}, ISP: {isp}")
+        except Exception as e:
+            logger.warning(f"获取IP地理位置信息失败 - IP: {proxy_data.ip}, Error: {str(e)}")
+            country, city, isp = None, None, None
+
         proxy = Proxy(
             id=str(uuid.uuid4()),
             type=proxy_data.type,
@@ -28,10 +37,11 @@ class ProxyService:
             port=proxy_data.port,
             username=proxy_data.username,
             password=proxy_data.password,
-            country=proxy_data.country,
-            city=proxy_data.city,
             status="INACTIVE",
-            success_rate=0.0
+            success_rate=0.0,
+            country=country,
+            city=city,
+            isp=isp
         )
         self.db.add(proxy)
         await self.db.commit()

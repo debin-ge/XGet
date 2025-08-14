@@ -18,6 +18,10 @@ class Settings(BaseSettings):
     LOG_LEVEL: str = os.getenv("LOG_LEVEL", "INFO")
     LOG_DIR: Optional[str] = os.getenv("LOG_DIR")
     
+    # IP地理位置查询配置
+    IP_GEOLOCATION_TIMEOUT: int = int(os.getenv("IP_GEOLOCATION_TIMEOUT", "10"))
+    IP_GEOLOCATION_RETRY_ATTEMPTS: int = int(os.getenv("IP_GEOLOCATION_RETRY_ATTEMPTS", "3"))
+    
     @property
     def get_database_url(self) -> str:
         if self.SQLALCHEMY_DATABASE_URI:
