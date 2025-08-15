@@ -51,9 +51,9 @@ class TwitterScraper:
             await self.api.pool.save(self.account)
             # 设置锁定时间为30分钟（1800秒）
             lock_duration = 1800
-            await self.api.pool.lock_until(self.account_info["username"], "search", utc.ts() + lock_duration)
+            await self.api.pool.lock_until(self.account_info["username"] if self.account_info["username"] else self.account_info["email"], "search", utc.ts() + lock_duration)
             
-            logger.info(f"Twitter API设置成功, username: {self.account_info['username']}")
+            logger.info(f"Twitter API设置成功, username: {self.account_info["username"] if self.account_info["username"] else self.account_info["email"]}")
             return True
         except Exception as e:
             logger.error(f"设置Twitter API失败, Error: {str(e)}")
@@ -65,8 +65,8 @@ class TwitterScraper:
         try:
             if self.account and self.api:
                 # 释放账号锁定
-                await self.api.pool.unlock(self.account_info["username"], "search")
-                logger.info(f"已释放账号锁定: {self.account_info['username']}")
+                await self.api.pool.unlock(self.account_info["username"] if self.account_info["username"] else self.account_info["email"], "search")
+                logger.info(f"已释放账号锁定: {self.account_info["username"] if self.account_info["username"] else self.account_info["email"]}")
         except Exception as e:
             logger.warning(f"清理资源时发生异常: {e}")
 
