@@ -19,13 +19,22 @@ class KafkaClient:
         if self._producer is None:
             async with self._lock:
                 if self._producer is None:
-                    self._producer = AIOKafkaProducer(
-                        bootstrap_servers=settings.KAFKA_BOOTSTRAP_SERVERS,
-                        value_serializer=lambda v: json.dumps(v).encode('utf-8'),
-                        acks='all'  # 确保消息被所有副本确认
-                    )
-                    await self._producer.start()
-                    logger.info("Kafka producer已启动")
+                    for attempt in range(self._retry_count):
+                        try:
+                            self._producer = AIOKafkaProducer(
+                                bootstrap_servers=settings.KAFKA_BOOTSTRAP_SERVERS,
+                                value_serializer=lambda v: json.dumps(v).encode('utf-8'),
+                                acks='all'  # 确保消息被所有副本确认
+                            )
+                            await self._producer.start()
+                            logger.info("Kafka producer已启动")
+                            break
+                        except Exception as e:
+                            logger.error(f"启动Kafka producer失败 (尝试 {attempt + 1}/{self._retry_count}): {e}")
+                            if attempt < self._retry_count - 1:
+                                await asyncio.sleep(self._retry_delay * (attempt + 1))
+                            else:
+                                raise Exception(f"Kafka producer启动最终失败: {e}")
         return self._producer
     
     async def send_message(self, topic: str, message: Dict[str, Any], retry: bool = True) -> bool:

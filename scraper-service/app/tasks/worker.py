@@ -11,7 +11,6 @@ from datetime import datetime
 from ..services.task_execution_service import TaskExecutionService
 from ..schemas.task_execution import TaskExecutionUpdate
 from ..core.logging import logger
-from ..core.config import settings
 from ..services.proxy_client import ProxyClient
 from ..services.account_client import AccountClient
 from ..db.database import get_db
@@ -27,6 +26,8 @@ class TaskWorker:
         self.stop_tasks = set()  # 需要停止的任务ID集合
         self.proxy_client = ProxyClient()  # 代理客户端
         self.account_client = AccountClient()  # 账号客户端
+        self.control_task = None  # 控制消息处理任务
+        self.task_futures = {}  # 任务Future对象，用于跟踪和取消
 
     async def start(self):
         """启动工作器"""
@@ -92,7 +93,7 @@ class TaskWorker:
                     return  # 退出启动流程
         
         # 启动控制消息处理
-        asyncio.create_task(self.process_control_messages())
+        self.control_task = asyncio.create_task(self.process_control_messages())
         
         try:
             async for message in self.consumer:
@@ -113,14 +114,29 @@ class TaskWorker:
                 task_id = task_data.get("task_id")
                 if task_id:
                     self.tasks[task_id] = task_data
-                    asyncio.create_task(self.process_task(task_data))
+                    # 创建任务并跟踪Future对象
+                    future = asyncio.create_task(self.process_task(task_data))
+                    self.task_futures[task_id] = future
+                    
+                    # 添加异常处理回调
+                    def task_done_callback(task_future, tid=task_id):
+                        try:
+                            task_future.result()  # 获取结果，如果有异常会抛出
+                        except Exception as e:
+                            logger.error(f"任务 {tid} 执行过程中发生未捕获的异常: {e}")
+                        finally:
+                            # 清理任务记录
+                            self.tasks.pop(tid, None)
+                            self.task_futures.pop(tid, None)
+                            self.stop_tasks.discard(tid)
+                    
+                    future.add_done_callback(lambda f: task_done_callback(f, task_id))
                     
                 # 手动提交偏移量，确保消息被确认
                 await self.consumer.commit()
         finally:
-            await self.consumer.stop()
-            await self.control_consumer.stop()
-            await self.producer.stop()
+            # 清理资源
+            await self._cleanup_resources()
 
     async def process_control_messages(self):
         """处理控制消息"""
@@ -149,15 +165,53 @@ class TaskWorker:
         except Exception as e:
             logger.error(f"处理控制消息异常: {e}")
 
+    async def _cleanup_resources(self):
+        """清理资源"""
+        # 取消所有正在运行的任务
+        for task_id, future in list(self.task_futures.items()):
+            if not future.done():
+                logger.info(f"取消任务: {task_id}")
+                future.cancel()
+                try:
+                    await future
+                except asyncio.CancelledError:
+                    pass
+                except Exception as e:
+                    logger.error(f"取消任务 {task_id} 时发生异常: {e}")
+        
+        # 取消控制消息处理任务
+        if self.control_task and not self.control_task.done():
+            self.control_task.cancel()
+            try:
+                await self.control_task
+            except asyncio.CancelledError:
+                pass
+        
+        # 关闭Kafka连接
+        try:
+            if self.consumer:
+                await self.consumer.stop()
+        except Exception as e:
+            logger.error(f"关闭consumer失败: {e}")
+            
+        try:
+            if self.control_consumer:
+                await self.control_consumer.stop()
+        except Exception as e:
+            logger.error(f"关闭control_consumer失败: {e}")
+            
+        try:
+            if self.producer:
+                await self.producer.stop()
+        except Exception as e:
+            logger.error(f"关闭producer失败: {e}")
+
     async def stop(self):
         """停止工作器"""
+        logger.info("正在停止工作器...")
         self.running = False
-        if self.consumer:
-            await self.consumer.stop()
-        if self.control_consumer:
-            await self.control_consumer.stop()
-        if self.producer:
-            await self.producer.stop()
+        await self._cleanup_resources()
+        logger.info("工作器已停止")
 
     async def process_task(self, task_data: Dict[str, Any]):
         """处理任务"""
@@ -166,6 +220,7 @@ class TaskWorker:
         parameters = task_data.get("parameters", {})
         account_id = task_data.get("account_id")
         proxy_id = task_data.get("proxy_id")
+        scraper = None
         
         try:
             # 更新任务状态为运行中
@@ -225,7 +280,7 @@ class TaskWorker:
                 if result:
                     result.task_id = task_id
                     results.append(result)
-                    
+                
             elif task_type == "USER_TWEETS":
                 uid = parameters.get("uid")
                 limit = parameters.get("limit", 100)
@@ -236,7 +291,7 @@ class TaskWorker:
                     await self.update_task_status(task_id, "FAILED", 0.0, error_msg="缺少参数: uid")
                     await self.update_execution_status(task_id, "FAILED", error_msg="缺少参数: uid")
                     return
-                
+            
                 async for tweet in scraper.get_user_tweets_stream(
                     uid, 
                     limit=limit, 
@@ -338,6 +393,7 @@ class TaskWorker:
                     result_count=0
                 )
                 await self.update_execution_status(task_id, "COMPLETED")
+                task_success = True
                 
             # 记录代理使用结果
             if proxy_id:
@@ -363,13 +419,15 @@ class TaskWorker:
                     service_name=settings.PROJECT_NAME,
                     response_time=None
                 )
-                
         finally:
-            # 从正在处理的任务和停止任务集合中移除
-            if task_id in self.tasks:
-                del self.tasks[task_id]
-            if task_id in self.stop_tasks:
-                self.stop_tasks.remove(task_id)
+            # 清理Twitter Scraper资源
+            if scraper:
+                try:
+                    await scraper.cleanup()
+                except Exception as e:
+                    logger.warning(f"清理Twitter Scraper资源失败: {e}")
+                
+        # 注意：任务清理在task_done_callback中处理，不需要在这里重复
 
     async def update_task_status(
         self, 
@@ -380,66 +438,68 @@ class TaskWorker:
         error_msg: Optional[str] = None
     ):
         """更新任务状态"""
-        async for db in get_db():
-            try:
-                update_data = {
-                    "status": status,
-                    "progress": progress,
-                    "updated_at": datetime.now()
-                }
+        db_gen = get_db()
+        db = await db_gen.__anext__()
+        try:
+            update_data = {
+                "status": status,
+                "progress": progress,
+                "updated_at": datetime.now()
+            }
+            
+            if result_count > 0:
+                update_data["result_count"] = result_count
                 
-                if result_count > 0:
-                    update_data["result_count"] = result_count
-                    
-                if error_msg:
-                    # 截断错误信息，防止超出数据库字段长度
-                    if len(error_msg) > 500:
-                        error_msg = error_msg[:497] + "..."
-                    update_data["error_message"] = error_msg
+            if error_msg:
+                # 截断错误信息，防止超出数据库字段长度
+                if len(error_msg) > 500:
+                    error_msg = error_msg[:497] + "..."
+                update_data["error_message"] = error_msg
+            
+            # 如果状态变为RUNNING，设置started_at
+            if status == "RUNNING":
+                update_data["started_at"] = datetime.now()
                 
-                # 如果状态变为RUNNING，设置started_at
-                if status == "RUNNING":
-                    update_data["started_at"] = datetime.now()
-                    
-                # 如果状态变为COMPLETED或FAILED，设置completed_at
-                if status in ["COMPLETED", "FAILED", "STOPPED"]:
-                    update_data["completed_at"] = datetime.now()
-                
-                await db.execute(
-                    update(Task)
-                    .where(Task.id == task_id)
-                    .values(**update_data)
-                )
-                await db.commit()
-                logger.info(f"任务状态已更新: {task_id} - {status} - {progress}")
-                break
-            except Exception as e:
-                logger.error(f"更新任务状态失败: {task_id} - {e}")
-                await db.rollback()
-                break
+            # 如果状态变为COMPLETED或FAILED，设置completed_at
+            if status in ["COMPLETED", "FAILED", "STOPPED"]:
+                update_data["completed_at"] = datetime.now()
+            
+            await db.execute(
+                update(Task)
+                .where(Task.id == task_id)
+                .values(**update_data)
+            )
+            await db.commit()
+            logger.info(f"任务状态已更新: {task_id} - {status} - {progress}")
+        except Exception as e:
+            logger.error(f"更新任务状态失败: {task_id} - {e}")
+            await db.rollback()
+        finally:
+            await db.close()
 
     async def update_execution_status(self, task_id: str, status: str, error_msg: Optional[str] = None):
         """更新任务执行记录状态"""
-        async for db in get_db():
-            try:
-                execution_service = TaskExecutionService(db)
-                executions = await execution_service.get_executions_by_task(task_id)
-                if executions:
-                    latest_execution = executions[0]  # 最新的执行记录
-                    await execution_service.update_execution(
-                        latest_execution.id,
-                        TaskExecutionUpdate(
-                            status=status,
-                            completed_at=datetime.now(),
-                            error_message=error_msg
-                        )
+        db_gen = get_db()
+        db = await db_gen.__anext__()
+        try:
+            execution_service = TaskExecutionService(db)
+            executions = await execution_service.get_executions_by_task(task_id)
+            if executions:
+                latest_execution = executions[0]  # 最新的执行记录
+                await execution_service.update_execution(
+                    latest_execution.id,
+                    TaskExecutionUpdate(
+                        status=status,
+                        completed_at=datetime.now(),
+                        error_message=error_msg
                     )
-                    await db.commit()
-                break
-            except Exception as e:
-                logger.error(f"更新任务执行记录状态失败: {task_id} - {e}")
-                await db.rollback()
-                break
+                )
+                await db.commit()
+        except Exception as e:
+            logger.error(f"更新任务执行记录状态失败: {task_id} - {e}")
+            await db.rollback()
+        finally:
+            await db.close()
 
 
 task_worker = TaskWorker()

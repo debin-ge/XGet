@@ -15,6 +15,7 @@ class TwitterScraper:
         self.proxy_info = proxy_info
         self.api = API()
         self.account = None
+        self._cancelled = False
 
     async def setup(self) -> bool:
         """设置Twitter API"""
@@ -48,20 +49,45 @@ class TwitterScraper:
             
             # 添加账号到API
             await self.api.pool.save(self.account)
-            await self.api.pool.lock_until(self.account_info["username"], "search", utc.ts() + 1000)
+            # 设置锁定时间为30分钟（1800秒）
+            lock_duration = 1800
+            await self.api.pool.lock_until(self.account_info["username"], "search", utc.ts() + lock_duration)
             
             logger.info(f"Twitter API设置成功, username: {self.account_info['username']}")
             return True
         except Exception as e:
             logger.error(f"设置Twitter API失败, Error: {str(e)}")
+            await self.cleanup()
             return False
+
+    async def cleanup(self):
+        """清理资源"""
+        try:
+            if self.account and self.api:
+                # 释放账号锁定
+                await self.api.pool.unlock(self.account_info["username"], "search")
+                logger.info(f"已释放账号锁定: {self.account_info['username']}")
+        except Exception as e:
+            logger.warning(f"清理资源时发生异常: {e}")
+
+    def cancel(self):
+        """取消操作"""
+        self._cancelled = True
+        logger.info("Twitter scraper 操作已取消")
+
+    def _check_cancelled(self):
+        """检查是否已取消"""
+        if self._cancelled:
+            raise asyncio.CancelledError("操作已被取消")
 
     async def get_user_info(self, username: str) -> Optional[ResultCreate]:
         """获取用户信息"""
         try:
+            self._check_cancelled()
             users = []
             logger.info(f"正在获取用户信息, username: {username}")
             async for user in self.api.search_user(username, limit=1):
+                self._check_cancelled()
                 users.append(user)
                 if len(users) >= 1:
                     break
@@ -79,6 +105,9 @@ class TwitterScraper:
                     "username": username
                 }
             )
+        except asyncio.CancelledError:
+            logger.info(f"获取用户信息被取消, username: {username}")
+            raise
         except Exception as e:
             logger.error(f"获取用户信息失败, username: {username}, error: {str(e)}")
             return None
@@ -92,9 +121,11 @@ class TwitterScraper:
     ):
         """获取用户推文（流式）"""
         try:
+            self._check_cancelled()
             logger.info(f"开始流式获取用户推文, username: {uid}, limit: {limit}, include_replies: {include_replies}, include_retweets: {include_retweets}")
             
             async for tweet in self.api.user_tweets(uid, limit=limit):
+                self._check_cancelled()
                 # 过滤回复和转发
                 if not include_replies and tweet.in_reply_to_status_id:
                     continue
@@ -114,15 +145,21 @@ class TwitterScraper:
                 yield result
 
             logger.info(f"流式获取用户推文完成, username: {uid}")
+        except asyncio.CancelledError:
+            logger.info(f"流式获取用户推文被取消, username: {uid}")
+            raise
         except Exception as e:
             logger.error(f"流式获取用户推文失败, username: {uid}, error: {str(e)}")
+            # 发生异常时也要抛出，让调用者知道
 
     async def search_tweets_stream(self, query: str, limit: int = 5):
         """搜索推文（流式）"""
         try:
+            self._check_cancelled()
             logger.info(f"开始流式搜索推文, query: {query}, limit: {limit}")
 
             async for tweet in self.api.search(query, limit):
+                self._check_cancelled()
                 result = ResultCreate(
                     task_id="",  # 由调用者设置
                     data_type=RESULT_TYPE_TWEET,
@@ -136,15 +173,20 @@ class TwitterScraper:
                 yield result
                     
             logger.info(f"流式搜索推文完成, query: {query}")
+        except asyncio.CancelledError:
+            logger.info(f"流式搜索推文被取消, query: {query}")
+            raise
         except Exception as e:
             logger.error(f"流式搜索推文失败, query: {query}, error: {str(e)}")
 
     async def get_followers_stream(self, uid: str, limit: int = 100):
         """获取用户粉丝（流式）"""
         try:
+            self._check_cancelled()
             logger.info(f"开始流式获取用户粉丝, uid: {uid}, limit: {limit}")
             
             async for follower in self.api.followers(uid, limit=limit):
+                self._check_cancelled()
                 result = ResultCreate(
                     task_id="",  # 由调用者设置
                     data_type=RESULT_TYPE_FOLLOWER,
@@ -158,6 +200,9 @@ class TwitterScraper:
                 yield result
                     
             logger.info(f"流式获取用户粉丝完成, uid: {uid}")
+        except asyncio.CancelledError:
+            logger.info(f"流式获取用户粉丝被取消, uid: {uid}")
+            raise
         except Exception as e:
             logger.error(f"流式获取用户粉丝失败, uid: {uid}, error: {str(e)}")
 
