@@ -57,6 +57,10 @@ class AccountResponse(AccountBase):
     headers: Optional[Dict] = None
     user_agent: Optional[str] = None
 
+    # 软删除字段
+    is_deleted: bool = False
+    deleted_at: Optional[datetime] = None
+
     class Config:
         from_attributes = True
 
@@ -74,6 +78,21 @@ class AccountLoginResponse(BaseModel):
     cookies_obtained: bool
     last_used: Optional[datetime] = None
     message: Optional[str] = None
+
+
+class AccountBatchDelete(BaseModel):
+    """批量删除账户请求模型"""
+    account_ids: List[str] = Field(description="要删除的账户ID列表", min_items=1, max_items=100)
+
+
+class AccountBatchDeleteResponse(BaseModel):
+    """批量删除账户响应模型"""
+    total_requested: int = Field(description="请求删除的账户总数")
+    successful_deletes: int = Field(description="成功删除的账户数")
+    failed_deletes: int = Field(description="删除失败的账户数")
+    deleted_account_ids: List[str] = Field(description="成功删除的账户ID列表")
+    failed_account_ids: List[str] = Field(description="删除失败的账户ID列表")
+    message: str = Field(description="操作结果消息")
 
 
 class AccountListResponse(PaginatedResponse[AccountResponse]):

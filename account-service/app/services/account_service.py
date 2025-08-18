@@ -34,7 +34,7 @@ class AccountService:
         await self.db.refresh(account)
         return account
 
-    async def get_accounts_paginated(self, page: int = 1, size: int = 20, active: Optional[bool] = None) -> AccountListResponse:
+    async def get_accounts_paginated(self, page: int = 1, size: int = 20, active: Optional[bool] = None, login_method: Optional[str] = None, search: Optional[str] = None) -> AccountListResponse:
         """获取分页的账户列表"""
         # 计算偏移量
         offset = (page - 1) * size
@@ -43,43 +43,72 @@ class AccountService:
         query = select(Account)
         count_query = select(func.count(Account.id))
         
+        query = query.filter(Account.is_deleted == False)
+        count_query = count_query.filter(Account.is_deleted == False)
+        
         # 添加筛选条件
         if active is not None:
             query = query.filter(Account.active == active)
             count_query = count_query.filter(Account.active == active)
         
-        # 获取总数
-        total_result = await self.db.execute(count_query)
-        total = total_result.scalar() or 0
+        if login_method is not None:
+            query = query.filter(Account.login_method == login_method.upper())
+            count_query = count_query.filter(Account.login_method == login_method.upper())
         
-        # 获取分页数据
-        query = query.offset(offset).limit(size)
-        result = await self.db.execute(query)
-        accounts = result.scalars().all()
+        if search is not None:
+            query = query.filter(Account.username.ilike(f"%{search}%") | Account.email.ilike(f"%{search}%"))
+            count_query = count_query.filter(Account.username.ilike(f"%{search}%") | Account.email.ilike(f"%{search}%"))
+        
+        # 执行查询
+        query = query.offset(offset).limit(size).order_by(Account.created_at.desc())
+        
+        accounts_result = await self.db.execute(query)
+        accounts = accounts_result.scalars().all()
+        
+        count_result = await self.db.execute(count_query)
+        total = count_result.scalar()
         
         # 返回分页响应
         return AccountListResponse.create(accounts, total, page, size)
 
-    async def get_accounts(self, skip: int = 0, limit: int = 100, active: Optional[bool] = None) -> List[Account]:
+    async def get_accounts(self, skip: int = 0, limit: int = 100, active: Optional[bool] = None, include_deleted: bool = False) -> List[Account]:
         """保留原有方法以兼容性"""
         query = select(Account)
+        
+
+        if not include_deleted:
+            query = query.filter(Account.is_deleted == False)
+            
         if active is not None:
             query = query.filter(Account.active == active)
         query = query.offset(skip).limit(limit)
         result = await self.db.execute(query)
         return result.scalars().all()
 
-    async def get_account(self, account_id: str) -> Optional[Account]:
-        result = await self.db.execute(select(Account).filter(Account.id == account_id))
+    async def get_account(self, account_id: str, include_deleted: bool = False) -> Optional[Account]:
+        """获取单个账户，默认不包括已删除的账户"""
+        query = select(Account).filter(Account.id == account_id)
+        
+
+        if not include_deleted:
+            query = query.filter(Account.is_deleted == False)
+            
+        result = await self.db.execute(query)
         return result.scalars().first()
 
     async def update_account(self, account_id: str, account_data: AccountUpdate) -> Optional[Account]:
+
+        account = await self.get_account(account_id, include_deleted=False)
+        if not account:
+            return None
+            
         update_data = account_data.dict(exclude_unset=True)
         update_data["updated_at"] = datetime.now()
         
         await self.db.execute(
             update(Account)
             .where(Account.id == account_id)
+            .where(Account.is_deleted == False)
             .values(**update_data)
         )
         await self.db.commit()
@@ -87,12 +116,32 @@ class AccountService:
         return await self.get_account(account_id)
 
     async def delete_account(self, account_id: str) -> bool:
+        """软删除账户"""
+
+        account = await self.get_account(account_id, include_deleted=False)
+        if not account:
+            return False
+            
+
         result = await self.db.execute(
-            delete(Account).where(Account.id == account_id)
+            update(Account)
+            .where(Account.id == account_id)
+            .where(Account.is_deleted == False)
+            .values(
+                is_deleted=True,
+                deleted_at=datetime.now(),
+                updated_at=datetime.now()
+            )
         )
         await self.db.commit()
-        return result.rowcount > 0
         
+        if result.rowcount > 0:
+            logger.info(f"成功软删除账户: {account_id}")
+            return True
+        else:
+            logger.warning(f"软删除账户失败: {account_id}")
+            return False
+   
     def _truncate_error_msg(self, error_msg: str, max_length: int = 500) -> str:
         """Truncate error message to specified length to prevent database errors"""
         if error_msg and len(error_msg) > max_length:

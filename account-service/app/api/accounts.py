@@ -22,19 +22,22 @@ async def get_accounts(
     page: int = Query(1, ge=1, description="页码，从1开始"),
     size: int = Query(20, ge=1, le=100, description="每页大小，最大100"),
     active: Optional[bool] = Query(None, description="按激活状态筛选"),
+    login_method: Optional[str] = Query(None, description="按登录方式筛选"),
+    search: Optional[str] = Query(None, description="按用户名或邮箱搜索"),
     db: AsyncSession = Depends(get_db)
 ):
     """获取账户列表（分页）"""
     service = AccountService(db)
-    return await service.get_accounts_paginated(page, size, active)
+    return await service.get_accounts_paginated(page, size, active, login_method, search)
 
 @router.get("/{account_id}", response_model=AccountResponse)
 async def get_account(
     account_id: str, 
+    include_deleted: bool = Query(False, description="是否包括已删除的账户"),
     db: AsyncSession = Depends(get_db)
 ):
     service = AccountService(db)
-    account = await service.get_account(account_id)
+    account = await service.get_account(account_id, include_deleted)
     if not account:
         raise HTTPException(status_code=404, detail="Account not found")
     return account
@@ -56,6 +59,7 @@ async def delete_account(
     account_id: str, 
     db: AsyncSession = Depends(get_db)
 ):
+    """软删除账户"""
     service = AccountService(db)
     success = await service.delete_account(account_id)
     if not success:
@@ -114,3 +118,4 @@ async def login_account(
             last_used=updated_account.last_used,
             message=updated_account.error_msg if updated_account.error_msg else "登录成功" if updated_account.active else "登录失败"
         )
+
