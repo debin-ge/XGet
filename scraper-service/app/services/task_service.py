@@ -19,13 +19,14 @@ class TaskService:
         """创建采集任务"""
         task = Task(
             id=str(uuid.uuid4()),
+            task_name=task_data.task_name,
+            describe=task_data.describe,
             task_type=task_data.task_type,
             parameters=task_data.parameters,
             account_id=task_data.account_id,
             proxy_id=task_data.proxy_id,
-            status="PENDING",
-            progress=0.0,
-            result_count=0
+            user_id=task_data.user_id,
+            status="PENDING"
         )
         self.db.add(task)
         await self.db.commit()
@@ -34,10 +35,12 @@ class TaskService:
         # 发送任务到Kafka
         task_message = {
             "task_id": task.id,
+            "task_name": task.task_name,
             "task_type": task.task_type,
             "parameters": task.parameters,
             "account_id": task.account_id,
             "proxy_id": task.proxy_id,
+            "user_id": task.user_id,
             "created_at": datetime.now().isoformat()
         }
         
@@ -58,7 +61,8 @@ class TaskService:
         skip: int = 0, 
         limit: int = 100, 
         status: Optional[str] = None,
-        task_type: Optional[str] = None
+        task_type: Optional[str] = None,
+        user_id: Optional[str] = None
     ) -> List[Task]:
         """获取任务列表"""
         query = select(Task).order_by(desc(Task.created_at))
@@ -67,6 +71,8 @@ class TaskService:
             query = query.filter(Task.status == status)
         if task_type:
             query = query.filter(Task.task_type == task_type)
+        if user_id:
+            query = query.filter(Task.user_id == user_id)
             
         query = query.offset(skip).limit(limit)
         result = await self.db.execute(query)
@@ -77,7 +83,8 @@ class TaskService:
         page: int = 1,
         size: int = 20,
         status: Optional[str] = None,
-        task_type: Optional[str] = None
+        task_type: Optional[str] = None,
+        user_id: Optional[str] = None
     ) -> TaskListResponse:
         """获取分页任务列表"""
         # 构建查询条件
@@ -90,6 +97,9 @@ class TaskService:
         if task_type:
             query = query.filter(Task.task_type == task_type)
             count_query = count_query.filter(Task.task_type == task_type)
+        if user_id:
+            query = query.filter(Task.user_id == user_id)
+            count_query = count_query.filter(Task.user_id == user_id)
         
         # 获取总数
         total_result = await self.db.execute(count_query)
@@ -109,18 +119,17 @@ class TaskService:
         result = await self.db.execute(select(Task).filter(Task.id == task_id))
         return result.scalars().first()
 
+    async def get_task_by_name(self, task_name: str, user_id: str) -> Optional[Task]:
+        """根据任务名称和用户ID获取任务"""
+        result = await self.db.execute(
+            select(Task).filter(Task.task_name == task_name, Task.user_id == user_id)
+        )
+        return result.scalars().first()
+
     async def update_task(self, task_id: str, task_data: TaskUpdate) -> Optional[Task]:
         """更新任务信息"""
         update_data = task_data.dict(exclude_unset=True)
         update_data["updated_at"] = datetime.now()
-        
-        # 如果状态变为RUNNING，设置started_at
-        if task_data.status == "RUNNING":
-            update_data["started_at"] = datetime.now()
-            
-        # 如果状态变为COMPLETED或FAILED，设置completed_at
-        if task_data.status in ["COMPLETED", "FAILED"]:
-            update_data["completed_at"] = datetime.now()
             
         await self.db.execute(
             update(Task)
@@ -151,16 +160,18 @@ class TaskService:
         # 更新任务状态
         updated_task = await self.update_task(
             task_id, 
-            TaskUpdate(status="RUNNING", progress=0.0)
+            TaskUpdate(status="RUNNING")
         )
         
         # 将任务发送到Kafka队列
         task_message = {
             "task_id": task.id,
+            "task_name": task.task_name,
             "task_type": task.task_type,
             "parameters": task.parameters,
             "account_id": task.account_id,
             "proxy_id": task.proxy_id,
+            "user_id": task.user_id,
             "created_at": datetime.now().isoformat()
         }
         

@@ -161,7 +161,7 @@ class TaskWorker:
                         continue
                         
                     # 更新任务状态为已停止
-                    await self.update_task_status(task_id, "STOPPED", 0.0)
+                    await self.update_task_status(task_id, "STOPPED")
         except Exception as e:
             logger.error(f"处理控制消息异常: {e}")
 
@@ -224,12 +224,12 @@ class TaskWorker:
         
         try:
             # 更新任务状态为运行中
-            await self.update_task_status(task_id, "RUNNING", 0.0)
+            await self.update_task_status(task_id, "RUNNING")
             
             # 获取账号信息
             account_info = await self.account_client.get_account(account_id)
             if not account_info:
-                await self.update_task_status(task_id, "FAILED", 0.0, error_msg="获取账号信息失败")
+                await self.update_task_status(task_id, "FAILED", error_msg="获取账号信息失败")
                 await self.update_execution_status(task_id, "FAILED", error_msg="获取账号信息失败")
                 return
                             
@@ -244,7 +244,7 @@ class TaskWorker:
             # 设置Twitter API
             setup_success = await scraper.setup()
             if not setup_success:
-                await self.update_task_status(task_id, "FAILED", 0.0, error_msg="设置Twitter API失败")
+                await self.update_task_status(task_id, "FAILED", error_msg="设置Twitter API失败")
                 await self.update_execution_status(task_id, "FAILED", error_msg="设置Twitter API失败")
                 
                 # 记录代理使用失败
@@ -266,13 +266,13 @@ class TaskWorker:
             if task_type == "USER_INFO":
                 username = parameters.get("username")
                 if not username:
-                    await self.update_task_status(task_id, "FAILED", 0.0, error_msg="缺少参数: username")
+                    await self.update_task_status(task_id, "FAILED", error_msg="缺少参数: username")
                     await self.update_execution_status(task_id, "FAILED", error_msg="缺少参数: username")
                     return
                     
                 # 检查任务是否被要求停止
                 if task_id in self.stop_tasks:
-                    await self.update_task_status(task_id, "STOPPED", 0.0)
+                    await self.update_task_status(task_id, "STOPPED")
                     await self.update_execution_status(task_id, "STOPPED")
                     return
                     
@@ -283,12 +283,12 @@ class TaskWorker:
                 
             elif task_type == "USER_TWEETS":
                 uid = parameters.get("uid")
-                limit = parameters.get("limit", 100)
+                limit = parameters.get("limit", 10)
                 include_replies = parameters.get("include_replies", False)
                 include_retweets = parameters.get("include_retweets", False)
                 
                 if not uid:
-                    await self.update_task_status(task_id, "FAILED", 0.0, error_msg="缺少参数: uid")
+                    await self.update_task_status(task_id, "FAILED", error_msg="缺少参数: uid")
                     await self.update_execution_status(task_id, "FAILED", error_msg="缺少参数: uid")
                     return
             
@@ -300,7 +300,7 @@ class TaskWorker:
                 ):
                     # 检查任务是否被要求停止
                     if task_id in self.stop_tasks:
-                        await self.update_task_status(task_id, "STOPPED", 1.0)
+                        await self.update_task_status(task_id, "STOPPED")
                         await self.update_execution_status(task_id, "STOPPED")
                         return
                         
@@ -309,17 +309,17 @@ class TaskWorker:
                     
             elif task_type == "SEARCH":
                 query = parameters.get("query")
-                limit = parameters.get("limit", 5)
+                limit = parameters.get("limit", 10)
                 
                 if not query:
-                    await self.update_task_status(task_id, "FAILED", 0.0, error_msg="缺少参数: query")
+                    await self.update_task_status(task_id, "FAILED", error_msg="缺少参数: query")
                     await self.update_execution_status(task_id, "FAILED", error_msg="缺少参数: query")
                     return
                 
                 async for tweet in scraper.search_tweets_stream(query, limit=limit):
                     # 检查任务是否被要求停止
                     if task_id in self.stop_tasks:
-                        await self.update_task_status(task_id, "STOPPED", 0.0)
+                        await self.update_task_status(task_id, "STOPPED")
                         await self.update_execution_status(task_id, "STOPPED")
                         return
                         
@@ -328,17 +328,17 @@ class TaskWorker:
                     
             elif task_type == "TOPIC":
                 topic = parameters.get("topic")
-                limit = parameters.get("limit", 100)
+                limit = parameters.get("limit", 10)
                 
                 if not topic:
-                    await self.update_task_status(task_id, "FAILED", 0.0, error_msg="缺少参数: topic")
+                    await self.update_task_status(task_id, "FAILED", error_msg="缺少参数: topic")
                     await self.update_execution_status(task_id, "FAILED", error_msg="缺少参数: topic")
                     return
                     
                 async for tweet in scraper.get_topic_tweets_stream(topic, limit=limit):
                     # 检查任务是否被要求停止
                     if task_id in self.stop_tasks:
-                        await self.update_task_status(task_id, "STOPPED", 1.0)
+                        await self.update_task_status(task_id, "STOPPED")
                         await self.update_execution_status(task_id, "STOPPED")
                         return
                         
@@ -347,25 +347,44 @@ class TaskWorker:
                     
             elif task_type == "FOLLOWERS":
                 uid = parameters.get("uid")
-                limit = parameters.get("limit", 100)
+                limit = parameters.get("limit", 10)
                 
                 if not uid:
-                    await self.update_task_status(task_id, "FAILED", 0.0, error_msg="缺少参数: uid")
+                    await self.update_task_status(task_id, "FAILED", error_msg="缺少参数: uid")
                     await self.update_execution_status(task_id, "FAILED", error_msg="缺少参数: uid")
                     return
                     
                 async for follower in scraper.get_followers_stream(uid, limit=limit):
                     # 检查任务是否被要求停止
                     if task_id in self.stop_tasks:
-                        await self.update_task_status(task_id, "STOPPED", 1.0)
+                        await self.update_task_status(task_id, "STOPPED")
                         await self.update_execution_status(task_id, "STOPPED")
                         return
                         
                     follower.task_id = task_id
                     results.append(follower)
+                    
+            elif task_type == "FOLLOWING":
+                uid = parameters.get("uid")
+                limit = parameters.get("limit", 10)
+                
+                if not uid:
+                    await self.update_task_status(task_id, "FAILED", error_msg="缺少参数: uid")
+                    await self.update_execution_status(task_id, "FAILED", error_msg="缺少参数: uid")
+                    return
+                    
+                async for following in scraper.get_following_stream(uid, limit=limit):
+                    # 检查任务是否被要求停止
+                    if task_id in self.stop_tasks:
+                        await self.update_task_status(task_id, "STOPPED")
+                        await self.update_execution_status(task_id, "STOPPED")
+                        return
+                        
+                    following.task_id = task_id
+                    results.append(following)
 
             else:
-                await self.update_task_status(task_id, "FAILED", 0.0, error_msg=f"不支持的任务类型: {task_type}")
+                await self.update_task_status(task_id, "FAILED", error_msg=f"不支持的任务类型: {task_type}")
                 await self.update_execution_status(task_id, "FAILED", error_msg=f"不支持的任务类型: {task_type}")
                 return
                 
@@ -378,9 +397,7 @@ class TaskWorker:
                 # 更新任务状态
                 await self.update_task_status(
                     task_id, 
-                    "COMPLETED", 
-                    1.0, 
-                    result_count=len(saved_results)
+                    "COMPLETED"
                 )
                 await self.update_execution_status(task_id, "COMPLETED")
                 task_success = True
@@ -388,9 +405,7 @@ class TaskWorker:
                 # 没有结果，但任务完成
                 await self.update_task_status(
                     task_id, 
-                    "COMPLETED", 
-                    1.0, 
-                    result_count=0
+                    "COMPLETED"
                 )
                 await self.update_execution_status(task_id, "COMPLETED")
                 task_success = True
@@ -407,7 +422,7 @@ class TaskWorker:
                 
         except Exception as e:
             logger.error(f"处理任务异常: {task_id} - {e}")
-            await self.update_task_status(task_id, "FAILED", 0.0, error_msg=str(e))
+            await self.update_task_status(task_id, "FAILED", error_msg=str(e))
             await self.update_execution_status(task_id, "FAILED", error_msg=str(e))
             
             # 记录代理使用失败
@@ -433,8 +448,6 @@ class TaskWorker:
         self, 
         task_id: str, 
         status: str, 
-        progress: float, 
-        result_count: int = 0, 
         error_msg: Optional[str] = None
     ):
         """更新任务状态"""
@@ -443,12 +456,8 @@ class TaskWorker:
         try:
             update_data = {
                 "status": status,
-                "progress": progress,
                 "updated_at": datetime.now()
             }
-            
-            if result_count > 0:
-                update_data["result_count"] = result_count
                 
             if error_msg:
                 # 截断错误信息，防止超出数据库字段长度
@@ -456,21 +465,13 @@ class TaskWorker:
                     error_msg = error_msg[:497] + "..."
                 update_data["error_message"] = error_msg
             
-            # 如果状态变为RUNNING，设置started_at
-            if status == "RUNNING":
-                update_data["started_at"] = datetime.now()
-                
-            # 如果状态变为COMPLETED或FAILED，设置completed_at
-            if status in ["COMPLETED", "FAILED", "STOPPED"]:
-                update_data["completed_at"] = datetime.now()
-            
             await db.execute(
                 update(Task)
                 .where(Task.id == task_id)
                 .values(**update_data)
             )
             await db.commit()
-            logger.info(f"任务状态已更新: {task_id} - {status} - {progress}")
+            logger.info(f"任务状态已更新: {task_id} - {status}")
         except Exception as e:
             logger.error(f"更新任务状态失败: {task_id} - {e}")
             await db.rollback()

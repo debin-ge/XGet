@@ -124,8 +124,15 @@ class TwitterScraper:
             self._check_cancelled()
             logger.info(f"开始流式获取用户推文, username: {uid}, limit: {limit}, include_replies: {include_replies}, include_retweets: {include_retweets}")
             
-            async for tweet in self.api.user_tweets(uid, limit=limit):
+            count = 0
+            
+            async for tweet in self.api.user_tweets(uid):
                 self._check_cancelled()
+                
+                # 检查是否已达到目标limit
+                if count >= limit:
+                    break
+                
                 # 过滤回复和转发
                 if not include_replies and tweet.in_reply_to_status_id:
                     continue
@@ -143,8 +150,9 @@ class TwitterScraper:
                     }
                 )
                 yield result
+                count += 1
 
-            logger.info(f"流式获取用户推文完成, username: {uid}")
+            logger.info(f"流式获取用户推文完成, username: {uid}, 实际获取: {count}")
         except asyncio.CancelledError:
             logger.info(f"流式获取用户推文被取消, username: {uid}")
             raise
@@ -158,8 +166,15 @@ class TwitterScraper:
             self._check_cancelled()
             logger.info(f"开始流式搜索推文, query: {query}, limit: {limit}")
 
-            async for tweet in self.api.search(query, limit):
+            count = 0
+            
+            async for tweet in self.api.search(query):
                 self._check_cancelled()
+                
+                # 检查是否已达到目标limit
+                if count >= limit:
+                    break
+                
                 result = ResultCreate(
                     task_id="",  # 由调用者设置
                     data_type=RESULT_TYPE_TWEET,
@@ -171,8 +186,9 @@ class TwitterScraper:
                     }
                 )
                 yield result
+                count += 1
                     
-            logger.info(f"流式搜索推文完成, query: {query}")
+            logger.info(f"流式搜索推文完成, query: {query}, 实际获取: {count}")
         except asyncio.CancelledError:
             logger.info(f"流式搜索推文被取消, query: {query}")
             raise
@@ -185,8 +201,15 @@ class TwitterScraper:
             self._check_cancelled()
             logger.info(f"开始流式获取用户粉丝, uid: {uid}, limit: {limit}")
             
-            async for follower in self.api.followers(uid, limit=limit):
+            count = 0
+            
+            async for follower in self.api.followers(uid):
                 self._check_cancelled()
+                
+                # 检查是否已达到目标limit
+                if count >= limit:
+                    break
+                
                 result = ResultCreate(
                     task_id="",  # 由调用者设置
                     data_type=RESULT_TYPE_FOLLOWER,
@@ -198,8 +221,9 @@ class TwitterScraper:
                     }
                 )
                 yield result
+                count += 1
                     
-            logger.info(f"流式获取用户粉丝完成, uid: {uid}")
+            logger.info(f"流式获取用户粉丝完成, uid: {uid}, 实际获取: {count}")
         except asyncio.CancelledError:
             logger.info(f"流式获取用户粉丝被取消, uid: {uid}")
             raise
@@ -208,6 +232,60 @@ class TwitterScraper:
 
     async def get_topic_tweets_stream(self, topic: str, limit: int = 100):
         """获取话题相关推文（流式）"""
-        # 话题搜索实际上就是搜索带有特定话题标签的推文
-        async for result in self.search_tweets_stream(f"#{topic}", limit):
-            yield result
+        try:
+            self._check_cancelled()
+            logger.info(f"开始流式获取话题推文, topic: {topic}, limit: {limit}")
+            
+            async for result in self.search_tweets_stream(f"#{topic}", limit):
+                self._check_cancelled()
+    
+                # 更新metadata中的话题信息
+                result.metadata.update({
+                    "topic": topic,
+                    "query": f"#{topic}"
+                })
+                
+                yield result
+                
+            logger.info(f"流式获取话题推文完成, topic: {topic}")
+        except asyncio.CancelledError:
+            logger.info(f"流式获取话题推文被取消, topic: {topic}")
+            raise
+        except Exception as e:
+            logger.error(f"流式获取话题推文失败, topic: {topic}, error: {str(e)}")
+
+    async def get_following_stream(self, uid: str, limit: int = 100):
+        """获取用户关注列表（流式）"""
+        try:
+            self._check_cancelled()
+            logger.info(f"开始流式获取用户关注列表, uid: {uid}, limit: {limit}")
+            
+            count = 0
+            
+            async for following in self.api.following(uid):
+                self._check_cancelled()
+                
+                # 检查是否已达到目标limit
+                if count >= limit:
+                    break
+                
+                result = ResultCreate(
+                    task_id="",  # 由调用者设置
+                    data_type=RESULT_TYPE_USER,  # 关注的用户信息
+                    data=following.dict(),
+                    metadata={
+                        "source": "twitter",
+                        "target_username": uid,
+                        "following_username": following.screen_name,
+                        "relationship_type": "following"
+                    }
+                )
+                yield result
+                count += 1
+                    
+            logger.info(f"流式获取用户关注列表完成, uid: {uid}, 实际获取: {count}")
+        except asyncio.CancelledError:
+            logger.info(f"流式获取用户关注列表被取消, uid: {uid}")
+            raise
+        except Exception as e:
+            logger.error(f"流式获取用户关注列表失败, uid: {uid}, error: {str(e)}")

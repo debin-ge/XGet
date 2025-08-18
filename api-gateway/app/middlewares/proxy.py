@@ -63,7 +63,7 @@ class ServiceRouter:
         logger.info("ServiceRouter clients closed")
 
     def _prepare_headers(self, request: Request, include_token: bool = True) -> Dict[str, str]:
-        """准备请求头部，移除可能导致冲突的头部"""
+        """准备请求头部，移除可能导致冲突的头部，并添加用户信息"""
         headers = dict(request.headers)
         headers.pop("host", None)
         
@@ -74,6 +74,22 @@ class ServiceRouter:
         # 移除可能导致冲突的头部，这些头部会由httpx自动管理
         headers.pop("content-length", None)
         headers.pop("transfer-encoding", None)
+        
+        # 添加用户信息到请求头（如果存在）
+        if hasattr(request.state, "user") and request.state.user:
+            user_info = request.state.user
+            # 添加用户ID到请求头
+            if "id" in user_info:
+                headers["X-User-ID"] = str(user_info["id"])
+            # 添加用户名到请求头
+            if "username" in user_info:
+                headers["X-Username"] = str(user_info["username"])
+            # 添加用户角色到请求头
+            if "roles" in user_info:
+                headers["X-User-Roles"] = ",".join(user_info["roles"])
+            # 添加是否为超级用户标识
+            if "is_superuser" in user_info:
+                headers["X-Is-Superuser"] = str(user_info["is_superuser"]).lower()
         
         return headers
 

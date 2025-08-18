@@ -27,10 +27,13 @@ class PaginatedResponse(BaseModel, Generic[T]):
 
 
 class TaskBase(BaseModel):
+    task_name: str
+    describe: Optional[str] = None
     task_type: str
     parameters: Dict[str, Any]
-    account_id: str
+    account_id: Optional[str] = None
     proxy_id: Optional[str] = None
+    user_id: Optional[str] = None
 
 
 class TaskCreate(TaskBase):
@@ -38,22 +41,22 @@ class TaskCreate(TaskBase):
 
 
 class TaskUpdate(BaseModel):
+    task_name: Optional[str] = None
+    describe: Optional[str] = None
+    task_type: Optional[str] = None
+    parameters: Optional[Dict[str, Any]] = None
+    account_id: Optional[str] = None
+    proxy_id: Optional[str] = None
     status: Optional[str] = None
-    progress: Optional[float] = None
-    result_count: Optional[int] = None
     error_message: Optional[str] = None
 
 
 class TaskResponse(TaskBase):
     id: str
     status: str
-    progress: float
-    result_count: int
     error_message: Optional[str] = None
     created_at: datetime
     updated_at: Optional[datetime] = None
-    started_at: Optional[datetime] = None
-    completed_at: Optional[datetime] = None
 
     class Config:
         from_attributes = True
@@ -61,11 +64,11 @@ class TaskResponse(TaskBase):
 
 class TaskStatusResponse(BaseModel):
     id: str
+    task_name: str
     status: str
-    progress: float
-    result_count: int
-    started_at: Optional[datetime] = None
-    completed_at: Optional[datetime] = None
+    error_message: Optional[str] = None
+    created_at: datetime
+    updated_at: Optional[datetime] = None
 
 # 新增分页响应类型
 class TaskListResponse(PaginatedResponse[TaskResponse]):
