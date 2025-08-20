@@ -73,7 +73,7 @@ class ProxyClient:
     async def record_proxy_usage(
         self, 
         proxy_id: str, 
-        success: bool,
+        success: str,
         user_id: Optional[str] = None,
         service_name: Optional[str] = None,
         response_time: Optional[int] = None

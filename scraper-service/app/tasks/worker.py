@@ -251,7 +251,7 @@ class TaskWorker:
                 if proxy_id:
                     await self.proxy_client.record_proxy_usage(
                         proxy_id=proxy_id,
-                        success=False,
+                        success="FAILED",
                         user_id=account_id,
                         service_name=settings.PROJECT_NAME,
                         response_time=None
@@ -261,7 +261,7 @@ class TaskWorker:
                 
             # 根据任务类型执行不同的抓取逻辑
             results = []
-            task_success = False
+            task_success = "SUCCESS"
             
             if task_type == "USER_INFO":
                 username = parameters.get("username")
@@ -420,7 +420,6 @@ class TaskWorker:
                     "COMPLETED"
                 )
                 await self.update_execution_status(task_id, "COMPLETED")
-                task_success = True
             else:
                 # 没有结果，但任务完成
                 await self.update_task_status(
@@ -428,9 +427,23 @@ class TaskWorker:
                     "COMPLETED"
                 )
                 await self.update_execution_status(task_id, "COMPLETED")
-                task_success = True
                 
-            # 记录代理使用结果
+                
+        except Exception as e:
+            logger.error(f"处理任务异常: {task_id} - {e}")
+            await self.update_task_status(task_id, "FAILED", error_msg=str(e))
+            await self.update_execution_status(task_id, "FAILED", error_msg=str(e))
+            task_success = "FAILED"
+            
+        finally:
+            # 清理Twitter Scraper资源
+            if scraper:
+                try:
+                    await scraper.cleanup()
+                except Exception as e:
+                    logger.warning(f"清理Twitter Scraper资源失败: {e}")
+                    
+            # 记录代理使用
             if proxy_id:
                 await self.proxy_client.record_proxy_usage(
                     proxy_id=proxy_id,
@@ -439,28 +452,6 @@ class TaskWorker:
                     service_name=settings.PROJECT_NAME,
                     response_time=None
                 )
-                
-        except Exception as e:
-            logger.error(f"处理任务异常: {task_id} - {e}")
-            await self.update_task_status(task_id, "FAILED", error_msg=str(e))
-            await self.update_execution_status(task_id, "FAILED", error_msg=str(e))
-            
-            # 记录代理使用失败
-            if proxy_id:
-                await self.proxy_client.record_proxy_usage(
-                    proxy_id=proxy_id,
-                    success=False,
-                    user_id=account_id,
-                    service_name=settings.PROJECT_NAME,
-                    response_time=None
-                )
-        finally:
-            # 清理Twitter Scraper资源
-            if scraper:
-                try:
-                    await scraper.cleanup()
-                except Exception as e:
-                    logger.warning(f"清理Twitter Scraper资源失败: {e}")
                 
         # 注意：任务清理在task_done_callback中处理，不需要在这里重复
 
