@@ -84,6 +84,7 @@ class TaskService:
         size: int = 20,
         status: Optional[str] = None,
         task_type: Optional[str] = None,
+        task_name: Optional[str] = None,
         user_id: Optional[str] = None
     ) -> TaskListResponse:
         """获取分页任务列表"""
@@ -97,6 +98,9 @@ class TaskService:
         if task_type:
             query = query.filter(Task.task_type == task_type)
             count_query = count_query.filter(Task.task_type == task_type)
+        if task_name:
+            query = query.filter(Task.task_name.like(f"%{task_name}%"))
+            count_query = count_query.filter(Task.task_name.like(f"%{task_name}%"))
         if user_id:
             query = query.filter(Task.user_id == user_id)
             count_query = count_query.filter(Task.user_id == user_id)

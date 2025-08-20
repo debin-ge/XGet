@@ -292,20 +292,24 @@ class TaskWorker:
                     await self.update_execution_status(task_id, "FAILED", error_msg="缺少参数: uid")
                     return
             
-                async for tweet in scraper.get_user_tweets_stream(
-                    uid, 
-                    limit=limit, 
-                    include_replies=include_replies, 
-                    include_retweets=include_retweets
-                ):
-                    # 检查任务是否被要求停止
-                    if task_id in self.stop_tasks:
-                        await self.update_task_status(task_id, "STOPPED")
-                        await self.update_execution_status(task_id, "STOPPED")
-                        return
-                        
-                    tweet.task_id = task_id
-                    results.append(tweet)
+                try:
+                    async for tweet in scraper.get_user_tweets_stream(
+                        uid, 
+                        limit=limit, 
+                        include_replies=include_replies, 
+                        include_retweets=include_retweets
+                    ):
+                        # 检查任务是否被要求停止
+                        if task_id in self.stop_tasks:
+                            await self.update_task_status(task_id, "STOPPED")
+                            await self.update_execution_status(task_id, "STOPPED")
+                            return
+                            
+                        tweet.task_id = task_id
+                        results.append(tweet)
+                except Exception as e:
+                    logger.error(f"获取用户推文时发生异常: {e}")
+                    raise  # 重新抛出异常，让外层异常处理逻辑处理
                     
             elif task_type == "SEARCH":
                 query = parameters.get("query")
@@ -316,15 +320,19 @@ class TaskWorker:
                     await self.update_execution_status(task_id, "FAILED", error_msg="缺少参数: query")
                     return
                 
-                async for tweet in scraper.search_tweets_stream(query, limit=limit):
-                    # 检查任务是否被要求停止
-                    if task_id in self.stop_tasks:
-                        await self.update_task_status(task_id, "STOPPED")
-                        await self.update_execution_status(task_id, "STOPPED")
-                        return
-                        
-                    tweet.task_id = task_id
-                    results.append(tweet)
+                try:
+                    async for tweet in scraper.search_tweets_stream(query, limit=limit):
+                        # 检查任务是否被要求停止
+                        if task_id in self.stop_tasks:
+                            await self.update_task_status(task_id, "STOPPED")
+                            await self.update_execution_status(task_id, "STOPPED")
+                            return
+                            
+                        tweet.task_id = task_id
+                        results.append(tweet)
+                except Exception as e:
+                    logger.error(f"搜索推文时发生异常: {e}")
+                    raise  # 重新抛出异常，让外层异常处理逻辑处理
                     
             elif task_type == "TOPIC":
                 topic = parameters.get("topic")
@@ -335,15 +343,19 @@ class TaskWorker:
                     await self.update_execution_status(task_id, "FAILED", error_msg="缺少参数: topic")
                     return
                     
-                async for tweet in scraper.get_topic_tweets_stream(topic, limit=limit):
-                    # 检查任务是否被要求停止
-                    if task_id in self.stop_tasks:
-                        await self.update_task_status(task_id, "STOPPED")
-                        await self.update_execution_status(task_id, "STOPPED")
-                        return
-                        
-                    tweet.task_id = task_id
-                    results.append(tweet)
+                try:
+                    async for tweet in scraper.get_topic_tweets_stream(topic, limit=limit):
+                        # 检查任务是否被要求停止
+                        if task_id in self.stop_tasks:
+                            await self.update_task_status(task_id, "STOPPED")
+                            await self.update_execution_status(task_id, "STOPPED")
+                            return
+                            
+                        tweet.task_id = task_id
+                        results.append(tweet)
+                except Exception as e:
+                    logger.error(f"获取话题推文时发生异常: {e}")
+                    raise  # 重新抛出异常，让外层异常处理逻辑处理
                     
             elif task_type == "FOLLOWERS":
                 uid = parameters.get("uid")
@@ -354,15 +366,19 @@ class TaskWorker:
                     await self.update_execution_status(task_id, "FAILED", error_msg="缺少参数: uid")
                     return
                     
-                async for follower in scraper.get_followers_stream(uid, limit=limit):
-                    # 检查任务是否被要求停止
-                    if task_id in self.stop_tasks:
-                        await self.update_task_status(task_id, "STOPPED")
-                        await self.update_execution_status(task_id, "STOPPED")
-                        return
-                        
-                    follower.task_id = task_id
-                    results.append(follower)
+                try:
+                    async for follower in scraper.get_followers_stream(uid, limit=limit):
+                        # 检查任务是否被要求停止
+                        if task_id in self.stop_tasks:
+                            await self.update_task_status(task_id, "STOPPED")
+                            await self.update_execution_status(task_id, "STOPPED")
+                            return
+                            
+                        follower.task_id = task_id
+                        results.append(follower)
+                except Exception as e:
+                    logger.error(f"获取用户粉丝时发生异常: {e}")
+                    raise  # 重新抛出异常，让外层异常处理逻辑处理
                     
             elif task_type == "FOLLOWING":
                 uid = parameters.get("uid")
@@ -373,15 +389,19 @@ class TaskWorker:
                     await self.update_execution_status(task_id, "FAILED", error_msg="缺少参数: uid")
                     return
                     
-                async for following in scraper.get_following_stream(uid, limit=limit):
-                    # 检查任务是否被要求停止
-                    if task_id in self.stop_tasks:
-                        await self.update_task_status(task_id, "STOPPED")
-                        await self.update_execution_status(task_id, "STOPPED")
-                        return
-                        
-                    following.task_id = task_id
-                    results.append(following)
+                try:
+                    async for following in scraper.get_following_stream(uid, limit=limit):
+                        # 检查任务是否被要求停止
+                        if task_id in self.stop_tasks:
+                            await self.update_task_status(task_id, "STOPPED")
+                            await self.update_execution_status(task_id, "STOPPED")
+                            return
+                            
+                        following.task_id = task_id
+                        results.append(following)
+                except Exception as e:
+                    logger.error(f"获取用户关注列表时发生异常: {e}")
+                    raise  # 重新抛出异常，让外层异常处理逻辑处理
 
             else:
                 await self.update_task_status(task_id, "FAILED", error_msg=f"不支持的任务类型: {task_type}")

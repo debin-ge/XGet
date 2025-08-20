@@ -56,6 +56,14 @@ class ProxyUsageHistory(Base):
     service_name = Column(String, nullable=True)  # 使用服务名称
     success = Column(String, default="SUCCESS")  # SUCCESS, FAILED, TIMEOUT
     response_time = Column(Integer, nullable=True)  # 响应时间（毫秒）
+    
+    proxy_ip = Column(String, nullable=True)  # 代理IP
+    proxy_port = Column(Integer, nullable=True)  # 代理端口
+    account_username_email = Column(String, nullable=True)  # 账户用户名或邮箱
+    task_name = Column(String, nullable=True)  # 任务名称
+    quality_score = Column(Float, nullable=True)  # 使用时的质量分数
+    latency = Column(Integer, nullable=True)  # 使用时的延迟（毫秒）
+    
     created_at = Column(DateTime, server_default=func.now())
     updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now())
     

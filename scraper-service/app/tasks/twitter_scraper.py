@@ -158,7 +158,7 @@ class TwitterScraper:
             raise
         except Exception as e:
             logger.error(f"流式获取用户推文失败, username: {uid}, error: {str(e)}")
-            # 发生异常时也要抛出，让调用者知道
+            raise  # 重新抛出异常，让调用者知道
 
     async def search_tweets_stream(self, query: str, limit: int = 5):
         """搜索推文（流式）"""
@@ -194,6 +194,7 @@ class TwitterScraper:
             raise
         except Exception as e:
             logger.error(f"流式搜索推文失败, query: {query}, error: {str(e)}")
+            raise  # 重新抛出异常，让调用者知道
 
     async def get_followers_stream(self, uid: str, limit: int = 100):
         """获取用户粉丝（流式）"""
@@ -229,6 +230,7 @@ class TwitterScraper:
             raise
         except Exception as e:
             logger.error(f"流式获取用户粉丝失败, uid: {uid}, error: {str(e)}")
+            raise  # 重新抛出异常，让调用者知道
 
     async def get_topic_tweets_stream(self, topic: str, limit: int = 100):
         """获取话题相关推文（流式）"""
@@ -253,6 +255,7 @@ class TwitterScraper:
             raise
         except Exception as e:
             logger.error(f"流式获取话题推文失败, topic: {topic}, error: {str(e)}")
+            raise  # 重新抛出异常，让调用者知道
 
     async def get_following_stream(self, uid: str, limit: int = 100):
         """获取用户关注列表（流式）"""
@@ -276,7 +279,7 @@ class TwitterScraper:
                     metadata={
                         "source": "twitter",
                         "target_username": uid,
-                        "following_username": following.screen_name,
+                        "following_username": following.displayname,
                         "relationship_type": "following"
                     }
                 )
@@ -289,3 +292,4 @@ class TwitterScraper:
             raise
         except Exception as e:
             logger.error(f"流式获取用户关注列表失败, uid: {uid}, error: {str(e)}")
+            raise  # 重新抛出异常，让调用者知道

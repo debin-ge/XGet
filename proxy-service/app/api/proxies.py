@@ -35,11 +35,12 @@ async def get_proxies(
     size: int = Query(20, ge=1, le=100, description="每页数量"),
     status: Optional[str] = Query(None, description="代理状态筛选"),
     country: Optional[str] = Query(None, description="国家筛选"),
+    ip: Optional[str] = Query(None, description="IP筛选"),
     db: AsyncSession = Depends(get_db)
 ):
     """获取代理列表"""
     service = ProxyService(db)
-    return await service.get_proxies_paginated(page, size, status, country)
+    return await service.get_proxies_paginated(page, size, status, country, ip)
 
 @router.get("/quality-info", response_model=ProxyQualityInfoListResponse)
 async def get_proxies_quality_info(
@@ -48,27 +49,11 @@ async def get_proxies_quality_info(
     status: Optional[str] = Query(None, description="代理状态筛选"),
     country: Optional[str] = Query(None, description="国家筛选"),
     min_quality_score: Optional[float] = Query(None, ge=0, le=1, description="最小质量分数筛选"),
-    sort_by: str = Query("quality_score", description="排序字段 (quality_score, total_usage, success_rate, last_used)"),
-    sort_order: str = Query("desc", description="排序方向 (asc, desc)"),
+    ip: Optional[str] = Query(None, description="IP筛选"),
     db: AsyncSession = Depends(get_db)
 ):
     """获取代理质量信息列表（包含IP+port、检测成功率、使用次数、成功次数、质量分数、最近使用时间等）"""
     service = ProxyService(db)
-    
-    # 验证排序字段
-    valid_sort_fields = ["quality_score", "total_usage", "success_rate", "last_used"]
-    if sort_by not in valid_sort_fields:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Invalid sort_by field. Must be one of: {', '.join(valid_sort_fields)}"
-        )
-    
-    # 验证排序方向
-    if sort_order.lower() not in ["asc", "desc"]:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Invalid sort_order. Must be 'asc' or 'desc'"
-        )
     
     quality_info_list, total = await service.get_proxies_quality_info(
         page=page,
@@ -76,8 +61,7 @@ async def get_proxies_quality_info(
         status=status,
         country=country,
         min_quality_score=min_quality_score,
-        sort_by=sort_by,
-        sort_order=sort_order
+        ip=ip
     )
     
     # 计算总页数
@@ -254,7 +238,7 @@ async def rotate_proxy(
 @router.post("/{proxy_id}/usage", response_model=ProxyUsageResult)
 async def record_proxy_usage(
     proxy_id: str,
-    success: bool,
+    success: str = "SUCCESS",
     account_id: Optional[str] = None,
     service_name: Optional[str] = None,
     response_time: Optional[int] = None,
@@ -363,50 +347,6 @@ async def create_proxy_usage_history(
     history = await service.create_usage_history(history_data)
     return history
 
-@router.get("/{proxy_id}/usage/history", response_model=ProxyUsageHistoryListResponse)
-async def get_proxy_usage_history_list(
-    proxy_id: str,
-    account_id: Optional[str] = None,
-    service_name: Optional[str] = None,
-    success: Optional[str] = None,
-    start_date: Optional[datetime] = None,
-    end_date: Optional[datetime] = None,
-    page: int = Query(1, ge=1, description="页码"),
-    size: int = Query(20, ge=1, le=100, description="每页数量"),
-    db: AsyncSession = Depends(get_db)
-):
-    """获取代理使用历史记录列表"""
-    service = ProxyService(db)
-    
-    # 检查代理是否存在
-    proxy = await service.get_proxy(proxy_id)
-    if not proxy:
-        raise HTTPException(status_code=404, detail="Proxy not found")
-    
-    filter_data = ProxyUsageHistoryFilter(
-        proxy_id=proxy_id,
-        account_id=account_id,
-        service_name=service_name,
-        success=success,
-        start_date=start_date,
-        end_date=end_date,
-        page=page,
-        size=size
-    )
-    
-    histories, total = await service.get_usage_history_list(filter_data)
-
-    # 计算总页数
-    pages = (total + size - 1) // size if total > 0 else 0
-    
-    return ProxyUsageHistoryListResponse(
-        total=total,
-        items=histories,
-        page=page,
-        size=size,
-        pages=pages
-    )
-
 @router.get("/usage/history/{history_id}", response_model=ProxyUsageHistoryResponse)
 async def get_proxy_usage_history(
     history_id: str,
@@ -472,7 +412,9 @@ async def record_proxy_usage_with_history(
 
 @router.get("/usage/history", response_model=ProxyUsageHistoryListResponse)
 async def get_all_usage_history(
-    account_id: Optional[str] = None,
+    proxy_ip: Optional[str] = None,
+    account_email: Optional[str] = None,
+    task_name: Optional[str] = None,
     service_name: Optional[str] = None,
     success: Optional[str] = None,
     start_date: Optional[datetime] = None,
@@ -485,7 +427,9 @@ async def get_all_usage_history(
     service = ProxyService(db)
     
     filter_data = ProxyUsageHistoryFilter(
-        account_id=account_id,
+        proxy_ip=proxy_ip,
+        account_email=account_email,
+        task_name=task_name,
         service_name=service_name,
         success=success,
         start_date=start_date,
@@ -496,7 +440,7 @@ async def get_all_usage_history(
     
     histories, total = await service.get_usage_history_list(filter_data)
 
-        # 计算总页数
+    # 计算总页数
     pages = (total + size - 1) // size if total > 0 else 0
     
     return ProxyUsageHistoryListResponse(

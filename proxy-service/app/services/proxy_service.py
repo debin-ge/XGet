@@ -5,20 +5,69 @@ from sqlalchemy import update, delete, desc, asc, or_, and_, func, exists, Strin
 from ..models.proxy import Proxy, ProxyQuality, ProxyUsageHistory
 from ..schemas.proxy import (
     ProxyCreate, ProxyUpdate, ProxyCheckResult, ProxyQualityCreate, ProxyQualityUpdate,
-    ProxyUsageHistoryCreate, ProxyUsageHistoryFilter, ProxyListResponse
+    ProxyUsageHistoryCreate, ProxyUsageHistoryFilter, ProxyListResponse, ProxyUsageHistoryResponse
 )
 from ..core.logging import logger
 from .ip_geolocation_service import ip_geolocation_service
+from .account_client import AccountClient
+from .scraper_client import ScraperClient
 import uuid
 from datetime import datetime, timedelta
 import aiohttp
-import asyncio
 import random
-
+import json
 
 class ProxyService:
     def __init__(self, db: AsyncSession):
         self.db = db
+        self.account_client = AccountClient()
+        self.scraper_client = ScraperClient()
+
+    def _normalize_datetime(self, dt: Optional[datetime]) -> Optional[datetime]:
+        """标准化日期时间，移除时区信息以兼容数据库"""
+        if dt is None:
+            return None
+        if dt.tzinfo is not None:
+            # 如果有时区信息，移除时区（保持UTC时间）
+            return dt.replace(tzinfo=None)
+        return dt
+
+    def _build_quality_score_filter(self, min_quality_score: float = 0.0, default_quality_score: float = 0.8):
+        """构建质量分数筛选条件的辅助方法
+        
+        Args:
+            min_quality_score: 最小质量分数参数
+            default_quality_score: 默认质量分数（对于没有质量记录的代理）
+            
+        Returns:
+            tuple: (score_min, score_max, quality_conditions)
+        """
+        # 根据传入的min_quality_score确定筛选区间
+        if min_quality_score == 0.9:
+            # 筛选区间：0.9-1.0
+            score_min, score_max = 0.9, 1.0
+        elif min_quality_score == 0.7:
+            # 筛选区间：0.7-0.9
+            score_min, score_max = 0.7, 0.9
+        elif min_quality_score == 0.5:
+            # 筛选区间：0.5-0.7
+            score_min, score_max = 0.5, 0.7
+        elif min_quality_score == 0:
+            # 筛选区间：0-0.5
+            score_min, score_max = 0.0, 0.5
+        else:
+            score_min, score_max = min_quality_score, 1.0
+        
+        # 构建筛选条件
+        quality_conditions = []
+
+        quality_conditions.append(ProxyQuality.quality_score.between(score_min, score_max))
+        
+        # 没有质量记录且默认分数在指定区间
+        if score_min <= default_quality_score < score_max:
+            quality_conditions.append(ProxyQuality.proxy_id.is_(None))
+        
+        return quality_conditions
 
     async def create_proxy(self, proxy_data: ProxyCreate) -> Proxy:
         """创建代理"""
@@ -86,7 +135,8 @@ class ProxyService:
         page: int = 1,
         size: int = 20,
         status: Optional[str] = None,
-        country: Optional[str] = None
+        country: Optional[str] = None,
+        ip: Optional[str] = None
     ) -> ProxyListResponse:
         """获取分页代理列表"""
         # 构建查询条件
@@ -99,7 +149,10 @@ class ProxyService:
         if country:
             query = query.filter(Proxy.country == country)
             count_query = count_query.filter(Proxy.country == country)
-        
+        if ip:
+            query = query.filter(Proxy.ip.ilike(f"%{ip}%"))
+            count_query = count_query.filter(Proxy.ip.ilike(f"%{ip}%"))
+            
         # 获取总数
         total_result = await self.db.execute(count_query)
         total = total_result.scalar() or 0
@@ -180,7 +233,15 @@ class ProxyService:
         
         # 先执行一个JOIN操作，确保只JOIN一次ProxyQuality表
         if min_quality_score is not None:
-            query = query.join(ProxyQuality).filter(ProxyQuality.quality_score >= min_quality_score)
+            # 使用辅助方法构建质量分数筛选条件
+            quality_conditions = self._build_quality_score_filter(min_quality_score)
+            
+            # 使用LEFT JOIN以包含所有代理
+            query = query.outerjoin(ProxyQuality)
+            
+            # 应用筛选条件
+            if quality_conditions:
+                query = query.filter(or_(*quality_conditions))
         else:
             # 如果不需要过滤质量分数，使用LEFT JOIN，这样可以包含没有质量记录的代理
             query = query.outerjoin(ProxyQuality)
@@ -584,14 +645,48 @@ class ProxyService:
     # 代理使用历史记录相关方法
     async def create_usage_history(self, history_data: ProxyUsageHistoryCreate) -> ProxyUsageHistory:
         """创建代理使用历史记录"""
+        # 获取代理信息（用于填充冗余字段）
+        proxy = await self.get_proxy(history_data.proxy_id)
+        if not proxy:
+            raise ValueError(f"Proxy not found: {history_data.proxy_id}")
+        
+        # 获取代理质量信息
+        quality = await self.get_proxy_quality(history_data.proxy_id)
+        
+        # 获取账户信息
+        account_username_email = None
+        if history_data.account_id:
+            try:
+                account_info = await self.account_client.get_account(history_data.account_id)
+                if account_info :
+                    account_username_email = account_info.get("username",  account_info.get("email", ""))
+            except Exception as e:
+                logger.warning(f"获取账户信息失败: {str(e)}")
+        
+        # 获取任务名称
+        task_name = None
+        if history_data.task_id:
+            try:
+                task_info = await self.scraper_client.get_task(history_data.task_id)
+                if task_info:
+                    task_name = task_info.get("task_name", "")
+            except Exception as e:
+                logger.warning(f"获取任务信息失败: {str(e)}")
+        
         history = ProxyUsageHistory(
             id=str(uuid.uuid4()),
             proxy_id=history_data.proxy_id,
-            user_id=history_data.user_id,
+            account_id=history_data.account_id,
             task_id=history_data.task_id,
             service_name=history_data.service_name,
             success=history_data.success,
-            response_time=history_data.response_time
+            response_time=history_data.response_time,
+            proxy_ip=proxy.ip,
+            proxy_port=proxy.port,
+            account_username_email=account_username_email,
+            task_name=task_name,
+            quality_score=quality.quality_score if quality else 0.8,
+            latency=proxy.latency
         )
         self.db.add(history)
         await self.db.commit()
@@ -612,29 +707,47 @@ class ProxyService:
         
         return history
 
-    async def get_usage_history_list(self, filter_data: ProxyUsageHistoryFilter) -> Tuple[List[ProxyUsageHistory], int]:
-        """获取代理使用历史记录列表"""
+    async def get_usage_history_list(self, filter_data: ProxyUsageHistoryFilter) -> Tuple[List[ProxyUsageHistoryResponse], int]:
+        """获取代理使用历史记录列表（优化版本，使用冗余字段减少关联查询）"""
+        
+        # 构建基础查询（现在只需要查询ProxyUsageHistory表）
         query = select(ProxyUsageHistory)
         
         # 应用过滤条件
         if filter_data.proxy_id:
             query = query.filter(ProxyUsageHistory.proxy_id == filter_data.proxy_id)
-        if filter_data.account_id:
-            query = query.filter(ProxyUsageHistory.account_id == filter_data.account_id)
+        
+        if filter_data.proxy_ip:
+            # 直接使用冗余字段进行筛选
+            query = query.filter(ProxyUsageHistory.proxy_ip.ilike(f"%{filter_data.proxy_ip}%"))
+        
+        if filter_data.account_email:
+            # 直接使用冗余字段进行筛选
+            query = query.filter(ProxyUsageHistory.account_username_email.ilike(f"%{filter_data.account_email}%"))
+        
+        if filter_data.task_name:
+            # 直接使用冗余字段进行筛选
+            query = query.filter(ProxyUsageHistory.task_name.ilike(f"%{filter_data.task_name}%"))
+        
         if filter_data.service_name:
             query = query.filter(ProxyUsageHistory.service_name == filter_data.service_name)
+        
         if filter_data.success:
             query = query.filter(ProxyUsageHistory.success == filter_data.success)
+        
         if filter_data.start_date:
-            query = query.filter(ProxyUsageHistory.created_at >= filter_data.start_date)
+            start_date = self._normalize_datetime(filter_data.start_date)
+            query = query.filter(ProxyUsageHistory.created_at >= start_date)
+        
         if filter_data.end_date:
-            query = query.filter(ProxyUsageHistory.created_at <= filter_data.end_date)
+            end_date = self._normalize_datetime(filter_data.end_date)
+            query = query.filter(ProxyUsageHistory.created_at <= end_date)
         
         # 获取总数
         count_query = select(func.count()).select_from(query.subquery())
         count_result = await self.db.execute(count_query)
         total = count_result.scalar()
-        
+         
         # 排序和分页
         query = query.order_by(desc(ProxyUsageHistory.created_at))
         query = query.offset((filter_data.page - 1) * filter_data.size).limit(filter_data.size)
@@ -642,8 +755,35 @@ class ProxyService:
         result = await self.db.execute(query)
         histories = result.scalars().all()
         
-        logger.debug(f"获取代理使用历史记录列表成功, total: {total}, page: {filter_data.page}, size: {filter_data.size}")
-        return histories, total
+        # 直接构建响应，无需额外的关联查询
+        history_list = []
+        for history in histories:
+            # 构建代理IP:端口格式
+            proxy_ip_port = f"{history.proxy_ip}:{history.proxy_port}" if history.proxy_ip and history.proxy_port else ""
+            
+            history_item = ProxyUsageHistoryResponse(
+                id=history.id,
+                proxy_id=history.proxy_id,
+                proxy_ip=proxy_ip_port,
+                account_id=history.account_id,
+                account_username_email=history.account_username_email,
+                task_id=history.task_id,
+                task_name=history.task_name,
+                service_name=history.service_name,
+                success=history.success,
+                response_time=history.response_time,
+                quality_score=history.quality_score,
+                latency=history.latency,
+                created_at=history.created_at,
+                updated_at=history.updated_at,
+                # 为了向后兼容，保留account_email字段
+                account_email=history.account_username_email
+            )
+            
+            history_list.append(history_item)
+        
+        logger.debug(f"获取代理使用历史记录列表成功（优化版本）, total: {total}, current_page_count: {len(history_list)}")
+        return history_list, total
 
     async def get_proxy_usage_statistics(self, proxy_id: str, days: int = 7) -> Dict[str, Any]:
         """获取代理使用统计信息"""
@@ -700,7 +840,7 @@ class ProxyService:
     async def record_proxy_usage_with_history(
         self, 
         proxy_id: str, 
-        success: bool,
+        success: str,
         account_id: Optional[str] = None,
         service_name: Optional[str] = None,
         response_time: Optional[int] = None
@@ -711,15 +851,12 @@ class ProxyService:
         if not proxy:
             return None, None, None
         
-        # 确定成功状态
-        success_status = "SUCCESS" if success else "FAILED"
-        
         # 创建使用历史记录
         history_data = ProxyUsageHistoryCreate(
             proxy_id=proxy_id,
             account_id=account_id,
             service_name=service_name,
-            success=success_status,
+            success=success,
             response_time=response_time
         )
         
@@ -735,8 +872,7 @@ class ProxyService:
         status: Optional[str] = None,
         country: Optional[str] = None,
         min_quality_score: Optional[float] = None,
-        sort_by: str = "quality_score",
-        sort_order: str = "desc"
+        ip: Optional[str] = None
     ) -> tuple[List, int]:
         """获取代理质量信息列表（带分页）
         
@@ -746,8 +882,7 @@ class ProxyService:
             status: 代理状态筛选
             country: 国家筛选
             min_quality_score: 最小质量分数筛选
-            sort_by: 排序字段 (quality_score, total_usage, success_rate, last_used)
-            sort_order: 排序方向 (asc, desc)
+            ip: IP地址筛选
         
         Returns:
             tuple: (代理质量信息列表, 总数量)
@@ -759,33 +894,21 @@ class ProxyService:
             )
             
             # 添加筛选条件
-            conditions = []
             if status:
-                conditions.append(Proxy.status == status)
+                query = query.filter(Proxy.status == status)
             if country:
-                conditions.append(Proxy.country == country)
+                query = query.filter(Proxy.country == country)
+            if ip:
+                query = query.filter(Proxy.ip.ilike(f"%{ip}%"))
+            
+            # 处理质量分数筛选
             if min_quality_score is not None:
-                conditions.append(ProxyQuality.quality_score >= min_quality_score)
-            
-            if conditions:
-                query = query.where(and_(*conditions))
-            
-            # 排序
-            if sort_by == "quality_score":
-                order_col = ProxyQuality.quality_score
-            elif sort_by == "total_usage":
-                order_col = ProxyQuality.total_usage
-            elif sort_by == "success_rate":
-                order_col = Proxy.success_rate
-            elif sort_by == "last_used":
-                order_col = ProxyQuality.last_used
-            else:
-                order_col = ProxyQuality.quality_score
-            
-            if sort_order.lower() == "desc":
-                query = query.order_by(order_col.desc().nulls_last())
-            else:
-                query = query.order_by(order_col.asc().nulls_last())
+                # 使用辅助方法构建质量分数筛选条件
+                quality_conditions = self._build_quality_score_filter(min_quality_score)
+                
+                # 应用筛选条件
+                if quality_conditions:
+                    query = query.filter(or_(*quality_conditions))
             
             # 获取总数
             count_query = select(func.count()).select_from(
@@ -804,34 +927,14 @@ class ProxyService:
             
             # 构造响应数据
             quality_info_list = []
-            for proxy, quality in rows:
-                # 如果没有质量记录，创建默认值
-                if quality is None:
-                    quality_data = {
-                        "total_usage": 0,
-                        "success_count": 0,
-                        "quality_score": 0.8,
-                        "last_used": None
-                    }
-                else:
-                    quality_data = {
-                        "total_usage": quality.total_usage,
-                        "success_count": quality.success_count,
-                        "quality_score": quality.quality_score,
-                        "last_used": quality.last_used
-                    }
-                
+            for proxy, quality in rows:       
                 # 构造质量信息响应
                 quality_info = {
                     "proxy_id": proxy.id,
                     "ip": proxy.ip,
                     "port": proxy.port,
                     "proxy_type": proxy.type,
-                    "total_usage": quality_data["total_usage"],
-                    "success_count": quality_data["success_count"],
                     "success_rate": proxy.success_rate,
-                    "quality_score": quality_data["quality_score"],
-                    "last_used": quality_data["last_used"],
                     "status": proxy.status,
                     "country": proxy.country,
                     "city": proxy.city,
@@ -840,6 +943,17 @@ class ProxyService:
                     "created_at": proxy.created_at,
                     "updated_at": proxy.updated_at
                 }
+                # 如果没有质量记录，创建默认值
+                if quality is None:
+                    quality_info["total_usage"] = 0
+                    quality_info["success_count"] = 0
+                    quality_info["quality_score"] = 0.8
+                    quality_info["last_used"] = None
+                else:
+                    quality_info["total_usage"] = quality.total_usage
+                    quality_info["success_count"] = quality.success_count
+                    quality_info["quality_score"] = quality.quality_score
+                    quality_info["last_used"] = quality.last_used
                 
                 quality_info_list.append(quality_info)
             

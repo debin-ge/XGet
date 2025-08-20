@@ -163,11 +163,19 @@ class ProxyUsageHistoryCreate(BaseModel):
     service_name: Optional[str] = None
     success: str = "SUCCESS"  # SUCCESS, FAILED, TIMEOUT
     response_time: Optional[int] = None
+    
+    proxy_ip: Optional[str] = None
+    proxy_port: Optional[int] = None
+    account_username_email: Optional[str] = None
+    task_name: Optional[str] = None
+    quality_score: Optional[float] = None
+    latency: Optional[int] = None
 
 
 class ProxyUsageHistoryResponse(BaseModel):
     id: str
     proxy_id: str
+    # 原有字段
     account_id: Optional[str] = None
     task_id: Optional[str] = None
     service_name: Optional[str] = None
@@ -175,6 +183,14 @@ class ProxyUsageHistoryResponse(BaseModel):
     response_time: Optional[int] = None
     created_at: datetime
     updated_at: Optional[datetime] = None
+    
+    # 冗余字段（直接存储，无需关联查询）
+    proxy_ip: Optional[str] = None
+    proxy_port: Optional[int] = None
+    account_username_email: Optional[str] = None
+    task_name: Optional[str] = None
+    quality_score: Optional[float] = None
+    latency: Optional[int] = None
 
     class Config:
         from_attributes = True
@@ -182,7 +198,9 @@ class ProxyUsageHistoryResponse(BaseModel):
 
 class ProxyUsageHistoryFilter(BaseModel):
     proxy_id: Optional[str] = None
-    account_id: Optional[str] = None
+    proxy_ip: Optional[str] = None
+    account_email: Optional[str] = None
+    task_name: Optional[str] = None
     service_name: Optional[str] = None
     success: Optional[str] = None
     start_date: Optional[datetime] = None

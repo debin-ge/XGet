@@ -31,13 +31,14 @@ async def get_tasks(
     size: int = Query(20, ge=1, le=100, description="每页数量"), 
     status: Optional[str] = Query(None, description="任务状态筛选"),
     task_type: Optional[str] = Query(None, description="任务类型筛选"),
+    task_name: Optional[str] = Query(None, description="按任务名称搜索"),
     db: AsyncSession = Depends(get_db),
     current_user_id: str = Depends(get_current_user_id)
 ):
     """获取任务列表 - 只返回当前用户的任务"""
     service = TaskService(db)
     # 自动使用当前用户ID进行筛选，确保用户只能看到自己的任务
-    return await service.get_tasks_paginated(page, size, status, task_type, current_user_id)
+    return await service.get_tasks_paginated(page, size, status, task_type,task_name, current_user_id)
 
 @router.get("/{task_id}", response_model=TaskResponse)
 async def get_task(
@@ -255,7 +256,7 @@ async def search_results(
     """搜索采集结果 - 只搜索当前用户的任务结果"""
     # 先获取当前用户的所有任务ID
     task_service = TaskService(db)
-    user_tasks = await task_service.get_tasks_paginated(1, 1000, None, None, current_user_id)
+    user_tasks = await task_service.get_tasks_paginated(1, 1000, None, None,None, current_user_id)
     user_task_ids = [task.id for task in user_tasks.items]
     
     if not user_task_ids:
@@ -296,66 +297,3 @@ async def search_results(
         size=limit
     )
 
-@router.post("/export/{task_id}")
-async def export_task_results(
-    task_id: str,
-    format: str = Query("json", regex="^(json|csv)$"),
-    db: AsyncSession = Depends(get_db),
-    current_user_id: str = Depends(get_current_user_id)
-):
-    """导出任务结果"""
-    from fastapi.responses import JSONResponse, StreamingResponse
-    import csv
-    import io
-    
-    # 先检查任务是否存在且属于当前用户
-    task_service = TaskService(db)
-    existing_task = await task_service.get_task(task_id)
-    if not existing_task:
-        raise HTTPException(status_code=404, detail="Task not found")
-    
-    if existing_task.user_id != current_user_id:
-        raise HTTPException(status_code=403, detail="Access denied: You can only export results of your own tasks")
-    
-    scraper_service = ScraperService()
-    results = await scraper_service.get_results(task_id=task_id, limit=10000)
-    
-    if format == "json":
-        return JSONResponse(content=results)
-    else:  # csv
-        # 创建CSV输出
-        output = io.StringIO()
-        if not results["data"]:
-            writer = csv.writer(output)
-            writer.writerow(["No data available"])
-        else:
-            # 获取第一条数据的所有字段作为标题
-            first_item = results["data"][0]
-            flat_data = {}
-            
-            # 扁平化嵌套数据
-            def flatten_dict(d, prefix=""):
-                for k, v in d.items():
-                    if isinstance(v, dict):
-                        flatten_dict(v, f"{prefix}{k}.")
-                    else:
-                        flat_data[f"{prefix}{k}"] = v
-            
-            flatten_dict(first_item)
-            fieldnames = flat_data.keys()
-            
-            writer = csv.DictWriter(output, fieldnames=fieldnames)
-            writer.writeheader()
-            
-            # 写入所有数据
-            for item in results["data"]:
-                flat_item = {}
-                flatten_dict(item)
-                writer.writerow(flat_item)
-        
-        output.seek(0)
-        return StreamingResponse(
-            iter([output.getvalue()]),
-            media_type="text/csv",
-            headers={"Content-Disposition": f"attachment; filename=task_{task_id}_results.csv"}
-        )

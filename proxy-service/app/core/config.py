@@ -22,6 +22,10 @@ class Settings(BaseSettings):
     IP_GEOLOCATION_TIMEOUT: int = int(os.getenv("IP_GEOLOCATION_TIMEOUT", "10"))
     IP_GEOLOCATION_RETRY_ATTEMPTS: int = int(os.getenv("IP_GEOLOCATION_RETRY_ATTEMPTS", "3"))
     
+    # 外部服务URL配置
+    ACCOUNT_SERVICE_URL: str = os.getenv("ACCOUNT_SERVICE_URL", "http://account-service:8000")
+    SCRAPER_SERVICE_URL: str = os.getenv("SCRAPER_SERVICE_URL", "http://scraper-service:8000")
+    
     @property
     def get_database_url(self) -> str:
         if self.SQLALCHEMY_DATABASE_URI:
