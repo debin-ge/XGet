@@ -309,7 +309,7 @@ class TaskWorker:
                         results.append(tweet)
                 except Exception as e:
                     logger.error(f"获取用户推文时发生异常: {e}")
-                    raise  # 重新抛出异常，让外层异常处理逻辑处理
+                    raise
                     
             elif task_type == "SEARCH":
                 query = parameters.get("query")
@@ -332,7 +332,7 @@ class TaskWorker:
                         results.append(tweet)
                 except Exception as e:
                     logger.error(f"搜索推文时发生异常: {e}")
-                    raise  # 重新抛出异常，让外层异常处理逻辑处理
+                    raise
                     
             elif task_type == "TOPIC":
                 topic = parameters.get("topic")
@@ -355,7 +355,7 @@ class TaskWorker:
                         results.append(tweet)
                 except Exception as e:
                     logger.error(f"获取话题推文时发生异常: {e}")
-                    raise  # 重新抛出异常，让外层异常处理逻辑处理
+                    raise
                     
             elif task_type == "FOLLOWERS":
                 uid = parameters.get("uid")
@@ -378,7 +378,7 @@ class TaskWorker:
                         results.append(follower)
                 except Exception as e:
                     logger.error(f"获取用户粉丝时发生异常: {e}")
-                    raise  # 重新抛出异常，让外层异常处理逻辑处理
+                    raise
                     
             elif task_type == "FOLLOWING":
                 uid = parameters.get("uid")
@@ -401,7 +401,7 @@ class TaskWorker:
                         results.append(following)
                 except Exception as e:
                     logger.error(f"获取用户关注列表时发生异常: {e}")
-                    raise  # 重新抛出异常，让外层异常处理逻辑处理
+                    raise
 
             else:
                 await self.update_task_status(task_id, "FAILED", error_msg=f"不支持的任务类型: {task_type}")
