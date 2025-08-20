@@ -210,15 +210,14 @@ class TwitterScraper:
                 # 检查是否已达到目标limit
                 if count >= limit:
                     break
-                
+
                 result = ResultCreate(
                     task_id="",  # 由调用者设置
                     data_type=RESULT_TYPE_FOLLOWER,
                     data=follower.dict(),
                     metadata={
                         "source": "twitter",
-                        "target_username": follower.display_name,
-                        "follower_username": follower.screen_name
+                        "follower_username": follower.displayname
                     }
                 )
                 yield result
@@ -278,7 +277,6 @@ class TwitterScraper:
                     data=following.dict(),
                     metadata={
                         "source": "twitter",
-                        "target_username": uid,
                         "following_username": following.displayname,
                         "relationship_type": "following"
                     }
