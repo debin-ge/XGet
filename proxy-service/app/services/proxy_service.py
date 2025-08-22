@@ -503,7 +503,7 @@ class ProxyService:
         
         return quality
         
-    async def record_proxy_usage(self, proxy_id: str, success: bool) -> Tuple[Optional[Proxy], Optional[ProxyQuality]]:
+    async def record_proxy_usage(self, proxy_id: str, success: str) -> Tuple[Optional[Proxy], Optional[ProxyQuality]]:
         """记录代理使用情况并更新质量"""
         proxy = await self.get_proxy(proxy_id)
         if not proxy:
@@ -525,7 +525,7 @@ class ProxyService:
         
         # 更新使用次数和成功次数
         total_usage = quality.total_usage + 1
-        success_count = quality.success_count + (1 if success else 0)
+        success_count = quality.success_count + (1 if success == "SUCCESS" else 0)
         
         # 计算新的质量得分
         # 基础成功率
@@ -537,7 +537,7 @@ class ProxyService:
             quality_score = quality.quality_score * 0.7 + success_rate * 0.3
             
             # 如果当前请求失败，额外惩罚
-            if not success:
+            if success != "SUCCESS":
                 quality_score *= 0.8
         else:
             quality_score = success_rate
@@ -547,7 +547,7 @@ class ProxyService:
         
         # 计算冷却时间（根据质量得分动态调整）
         # 质量越低，冷却时间越长
-        if success:
+        if success == "SUCCESS":
             cooldown_time = int(30 * (1 - quality_score))  # 最长30秒冷却
         else:
             # 失败时，增加冷却时间
@@ -645,7 +645,7 @@ class ProxyService:
     # 代理使用历史记录相关方法
     async def create_usage_history(self, history_data: ProxyUsageHistoryCreate) -> ProxyUsageHistory:
         """创建代理使用历史记录"""
-        # 获取代理信息（用于填充冗余字段）
+
         proxy = await self.get_proxy(history_data.proxy_id)
         if not proxy:
             raise ValueError(f"Proxy not found: {history_data.proxy_id}")
@@ -672,6 +672,11 @@ class ProxyService:
                     task_name = task_info.get("task_name", "")
             except Exception as e:
                 logger.warning(f"获取任务信息失败: {str(e)}")
+
+        # 首先记录使用情况并更新质量
+        proxy, quality = await self.record_proxy_usage(history_data.proxy_id, history_data.success)
+        if not proxy:
+            raise ValueError(f"Proxy not found: {history_data.proxy_id}")
         
         history = ProxyUsageHistory(
             id=str(uuid.uuid4()),
@@ -836,34 +841,6 @@ class ProxyService:
         
         logger.debug(f"获取代理使用统计信息成功, proxy_id: {proxy_id}, days: {days}")
         return statistics
-
-    async def record_proxy_usage_with_history(
-        self, 
-        proxy_id: str, 
-        success: str,
-        account_id: Optional[str] = None,
-        service_name: Optional[str] = None,
-        response_time: Optional[int] = None
-    ) -> Tuple[Optional[Proxy], Optional[ProxyQuality], Optional[ProxyUsageHistory]]:
-        """记录代理使用情况（包含历史记录）"""
-        # 首先记录使用情况并更新质量
-        proxy, quality = await self.record_proxy_usage(proxy_id, success)
-        if not proxy:
-            return None, None, None
-        
-        # 创建使用历史记录
-        history_data = ProxyUsageHistoryCreate(
-            proxy_id=proxy_id,
-            account_id=account_id,
-            service_name=service_name,
-            success=success,
-            response_time=response_time
-        )
-        
-        history = await self.create_usage_history(history_data)
-        
-        logger.info(f"记录代理使用情况（含历史）成功, proxy_id: {proxy_id}, success: {success}, history_id: {history.id}")
-        return proxy, quality, history
     
     async def get_proxies_quality_info(
         self, 

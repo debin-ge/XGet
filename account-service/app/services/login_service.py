@@ -11,7 +11,7 @@ class LoginService:
         """使用Twitter账号密码登录"""
         cookies_dict = {}
         proxy_client = ProxyClient()
-        login_success = False
+        login_success = "FAILED"
         
         async with async_playwright() as p:
             proxy_server = f"{proxy['type'].lower()}://{proxy['ip']}:{proxy['port']}"
@@ -79,24 +79,27 @@ class LoginService:
                 # 获取cookies
                 cookies = await context.cookies()
                 cookies_dict = {c['name']: c['value'] for c in cookies}
-                login_success = len(cookies_dict) > 0
+                login_success = "SUCCESS" if len(cookies_dict) > 0 else "FAILED"
                 
             except Exception as e:
                 logger.error(f"登录失败: {e}")
-                login_success = False
+
             finally:
                 response_time = int((time.time() - start_time) * 1000)
                 await browser.close()
         
-        # 记录代理使用结果
-        if proxy and proxy.get('id'):
-            await proxy_client.record_proxy_usage(
-                proxy['id'], 
-                login_success,
-                user_id=account["id"],
-                service_name=settings.PROJECT_NAME,
-                response_time=response_time
-            )
+                await proxy_client.record_proxy_usage(
+                    proxy_id=proxy['id'], 
+                    success=login_success,
+                    account_id=account["id"],
+                    service_name=settings.PROJECT_NAME,
+                    response_time=response_time,
+                    proxy_ip=proxy["ip"],
+                    proxy_port=proxy["port"],
+                    account_username_email=account["username"] or account["email"],
+                    quality_score=proxy["quality_score"],
+                    latency=proxy["latency"]
+                )
                 
         return cookies_dict
     
@@ -104,7 +107,7 @@ class LoginService:
         """使用Google账号登录Twitter"""
         cookies_dict = {}
         proxy_client = ProxyClient()
-        login_success = False
+        login_success = "FAILED"
         
         async with async_playwright() as playwright:
             proxy_server = f"{proxy['type'].lower()}://{proxy['ip']}:{proxy['port']}"
@@ -227,23 +230,26 @@ class LoginService:
                 # 获取cookies
                 cookies = await context.cookies()
                 cookies_dict = {c['name']: c['value'] for c in cookies}
-                login_success = len(cookies_dict) > 0
+                login_success = "SUCCESS" if cookies_dict else "FAILED"
 
             except Exception as e:
                 logger.error(f"Google登录流程异常: {e}")
-                login_success = False
+
             finally:
                 response_time = int((time.time() - start_time) * 1000)
                 await browser.close()
         
-        # 记录代理使用结果
-        if proxy and proxy.get('id'):
-            await proxy_client.record_proxy_usage(
-                proxy['id'], 
-                login_success,
-                user_id=google_account["id"],
-                service_name=settings.PROJECT_NAME,
-                response_time=response_time
-            )
+                await proxy_client.record_proxy_usage(
+                    proxy_id=proxy['id'], 
+                    success=login_success,
+                    account_id=account["id"],
+                    service_name=settings.PROJECT_NAME,
+                    response_time=response_time,
+                    proxy_ip=proxy["ip"],
+                    proxy_port=proxy["port"],
+                    account_username_email=google_account["email"] or google_account["username"],
+                    quality_score=proxy["quality_score"],
+                    latency=proxy["latency"]
+                )
 
         return cookies_dict

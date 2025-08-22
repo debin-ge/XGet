@@ -74,29 +74,46 @@ class ProxyClient:
         self, 
         proxy_id: str, 
         success: str,
-        user_id: Optional[str] = None,
+        task_id: Optional[str] = None,
+        account_id: Optional[str] = None,
         service_name: Optional[str] = None,
-        response_time: Optional[int] = None
+        response_time: Optional[int] = None,
+        proxy_ip: Optional[str] = None,
+        proxy_port: Optional[int] = None,
+        account_username_email: Optional[str] = None,
+        task_name: Optional[str] = None,
+        quality_score: Optional[float] = None,
+        latency: Optional[int] = None
     ) -> bool:
-        """记录代理使用结果（包含历史记录）"""
+        """记录代理使用结果"""
         if not proxy_id:
             logger.warning("无法记录代理使用结果：代理ID为空")
             return False
             
         try:
-            # 构建请求数据
+            # 构建请求数据，匹配新的ProxyUsageHistoryCreate schema
             data = {
-                "success": success,
-                "user_id": user_id,
+                "proxy_id": proxy_id,
+                "task_id": task_id,
+                "account_id": account_id,
                 "service_name": service_name or "scraper-service",
-                "response_time": response_time
+                "success": success,
+                "response_time": response_time,
+                "proxy_ip": proxy_ip,
+                "proxy_port": proxy_port,
+                "account_username_email": account_username_email,
+                "task_name": task_name,
+                "quality_score": quality_score,
+                "latency": latency
             }
             
             # 移除None值
             data = {k: v for k, v in data.items() if v is not None}
             
-            response = await self.client.post(f"{self.base_url}/api/v1/proxies/{proxy_id}/usage", json=data)
+            # 使用新的API端点
+            response = await self.client.post(f"{self.base_url}/api/v1/proxies/usage/history", json=data)
             response.raise_for_status()
+            
             logger.info(f"记录代理使用结果成功: proxy_id={proxy_id}, success={success}, service={data.get('service_name')}")
             return True
         except httpx.HTTPError as e:

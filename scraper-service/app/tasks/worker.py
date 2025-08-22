@@ -248,13 +248,20 @@ class TaskWorker:
                 await self.update_execution_status(task_id, "FAILED", error_msg="设置Twitter API失败")
                 
                 # 记录代理使用失败
-                if proxy_id:
+                if proxy_id and proxy_info:
                     await self.proxy_client.record_proxy_usage(
                         proxy_id=proxy_id,
                         success="FAILED",
-                        user_id=account_id,
+                        task_id=task_id,
+                        account_id=account_id,
                         service_name=settings.PROJECT_NAME,
-                        response_time=None
+                        response_time=None,
+                        proxy_ip=proxy_info.get("ip"),
+                        proxy_port=proxy_info.get("port"),
+                        account_username_email=account_info.get("username") or account_info.get("email"),
+                        task_name=task_data.get("task_name",None),
+                        quality_score=proxy_info.get("quality_score"),
+                        latency=proxy_info.get("latency")
                     )
                     
                 return
@@ -444,16 +451,22 @@ class TaskWorker:
                     logger.warning(f"清理Twitter Scraper资源失败: {e}")
                     
             # 记录代理使用
-            if proxy_id:
+            if proxy_id and proxy_info:
                 await self.proxy_client.record_proxy_usage(
                     proxy_id=proxy_id,
                     success=task_success,
-                    user_id=account_id,
+                    task_id=task_id,
+                    account_id=account_id,
                     service_name=settings.PROJECT_NAME,
-                    response_time=None
+                    response_time=None,
+                    proxy_ip=proxy_info.get("ip"),
+                    proxy_port=proxy_info.get("port"),
+                    account_username_email=account_info.get("username") or account_info.get("email"),
+                    task_name=task_data.get("task_name",None),
+                    quality_score=proxy_info.get("quality_score"),
+                    latency=proxy_info.get("latency")
                 )
                 
-        # 注意：任务清理在task_done_callback中处理，不需要在这里重复
 
     async def update_task_status(
         self, 

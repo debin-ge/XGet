@@ -12,5 +12,4 @@ class LoginHistory(Base):
     login_time = Column(DateTime, server_default=func.now())
     status = Column(String)  # SUCCESS, FAILED
     error_msg = Column(String, nullable=True)
-    cookies_count = Column(Integer, default=0)
     response_time = Column(Integer, nullable=True)  # 响应时间（毫秒） 

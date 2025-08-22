@@ -235,35 +235,6 @@ async def rotate_proxy(
     
     return proxy
 
-@router.post("/{proxy_id}/usage", response_model=ProxyUsageResult)
-async def record_proxy_usage(
-    proxy_id: str,
-    success: str = "SUCCESS",
-    account_id: Optional[str] = None,
-    service_name: Optional[str] = None,
-    response_time: Optional[int] = None,
-    db: AsyncSession = Depends(get_db)
-):
-    """记录代理使用情况（成功/失败，包含历史记录）"""
-    service = ProxyService(db)
-    
-    # 使用新的方法，同时记录使用情况和历史记录
-    proxy, quality, history = await service.record_proxy_usage_with_history(
-        proxy_id=proxy_id,
-        success=success,
-        account_id=account_id,
-        service_name=service_name,
-        response_time=response_time
-    )
-    
-    if not proxy or not quality:
-        raise HTTPException(status_code=404, detail="Proxy not found")
-    
-    return ProxyUsageResult(
-        success=True,
-        error_msg=None
-    )
-
 @router.get("/{proxy_id}/quality", response_model=ProxyQualityResponse)
 async def get_proxy_quality(
     proxy_id: str,
@@ -327,22 +298,13 @@ async def batch_check_proxies(
     }
 
 # 代理使用历史记录相关API
-@router.post("/{proxy_id}/usage/history", response_model=ProxyUsageHistoryResponse)
+@router.post("/usage/history", response_model=ProxyUsageHistoryResponse)
 async def create_proxy_usage_history(
-    proxy_id: str,
     history_data: ProxyUsageHistoryCreate,
     db: AsyncSession = Depends(get_db)
 ):
     """创建代理使用历史记录"""
     service = ProxyService(db)
-    
-    # 检查代理是否存在
-    proxy = await service.get_proxy(proxy_id)
-    if not proxy:
-        raise HTTPException(status_code=404, detail="Proxy not found")
-    
-    # 确保proxy_id一致
-    history_data.proxy_id = proxy_id
     
     history = await service.create_usage_history(history_data)
     return history
@@ -377,38 +339,6 @@ async def get_proxy_usage_statistics(
     
     statistics = await service.get_proxy_usage_statistics(proxy_id, days)
     return statistics
-
-@router.post("/{proxy_id}/usage/with-history", response_model=Dict)
-async def record_proxy_usage_with_history(
-    proxy_id: str,
-    success: bool,
-    account_id: Optional[str] = None,
-    service_name: Optional[str] = None,
-    response_time: Optional[int] = None,
-    db: AsyncSession = Depends(get_db)
-):
-    """记录代理使用情况（包含历史记录）"""
-    service = ProxyService(db)
-    
-    proxy, quality, history = await service.record_proxy_usage_with_history(
-        proxy_id=proxy_id,
-        success=success,
-        account_id=account_id,
-        service_name=service_name,
-        response_time=response_time
-    )
-    
-    if not proxy or not quality or not history:
-        raise HTTPException(status_code=404, detail="Proxy not found")
-    
-    return {
-        "success": True,
-        "proxy_id": proxy_id,
-        "history_id": history.id,
-        "quality_score": quality.quality_score,
-        "total_usage": quality.total_usage,
-        "success_count": quality.success_count
-    }
 
 @router.get("/usage/history", response_model=ProxyUsageHistoryListResponse)
 async def get_all_usage_history(

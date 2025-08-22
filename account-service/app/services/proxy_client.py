@@ -21,23 +21,13 @@ class ProxyClient:
         except httpx.HTTPError as e:
             logger.error(f"获取代理信息失败: {e}")
             return None
-    
-    async def get_available_proxy(self) -> Optional[Dict]:
-        """获取一个可用的代理"""
-        try:
-            response = await self.client.get(f"{self.base_url}/api/v1/proxies/available")
-            response.raise_for_status()
-            return response.json()
-        except httpx.HTTPError as e:
-            logger.error(f"获取可用代理失败: {e}")
-            return None
 
     async def get_rotating_proxy(
         self,
         country: Optional[str] = None,
         min_quality_score: Optional[float] = 0.6
     ) -> Optional[Dict]:
-        """获取一个轮换代理（高质量）"""
+        """获取一个轮换代理"""
         try:
             params = {}
             if country:
@@ -55,10 +45,16 @@ class ProxyClient:
     async def record_proxy_usage(
         self, 
         proxy_id: str, 
-        success: bool,
-        user_id: Optional[str] = None,
+        success: str,
+        account_id: Optional[str] = None,
         service_name: Optional[str] = None,
-        response_time: Optional[int] = None
+        response_time: Optional[int] = None,
+        proxy_ip: Optional[str] = None,
+        proxy_port: Optional[int] = None,
+        account_username_email: Optional[str] = None,
+        task_name: Optional[str] = None,
+        quality_score: Optional[float] = None,
+        latency: Optional[int] = None
     ) -> bool:
         """记录代理使用结果（包含历史记录）"""
         if not proxy_id:
@@ -68,16 +64,24 @@ class ProxyClient:
         try:
             # 构建请求数据
             data = {
+                "proxy_id": proxy_id,
                 "success": success,
-                "user_id": user_id,
+                "account_id": account_id,
                 "service_name": service_name or "account-service",
-                "response_time": response_time
+                "response_time": response_time,
+                "proxy_ip": proxy_ip,
+                "proxy_port": proxy_port,
+                "account_username_email": account_username_email,
+                "task_name": task_name,
+                "quality_score": quality_score,
+                "latency": latency
             }
             
             # 移除None值
             data = {k: v for k, v in data.items() if v is not None}
             
-            response = await self.client.post(f"{self.base_url}/api/v1/proxies/{proxy_id}/usage", json=data)
+            # 使用新的API端点
+            response = await self.client.post(f"{self.base_url}/api/v1/proxies/usage/history", json=data)
             response.raise_for_status()
             logger.info(f"记录代理使用结果成功: proxy_id={proxy_id}, success={success}, service={data.get('service_name')}")
             return True
