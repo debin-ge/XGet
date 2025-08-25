@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.orm import Session
 from typing import List, Optional
 
@@ -6,7 +6,8 @@ from ..db.database import get_db
 from ..models.user import User
 from ..schemas.role import (
     RoleCreate, RoleUpdate, Role as RoleSchema, Permission as PermissionSchema,
-    PermissionCreate, UserRoleCreate, RoleAssignment, RoleRemoval
+    PermissionCreate, UserRoleCreate, RoleAssignment, RoleRemoval,
+    RoleListResponse, PermissionListResponse
 )
 from ..services.role_service import RoleService
 from ..services.user_service import UserService
@@ -34,18 +35,17 @@ async def create_permission(
         )
 
 
-@router.get("/permissions", response_model=List[PermissionSchema])
+@router.get("/permissions", response_model=PermissionListResponse)
 async def get_permissions(
-    skip: int = 0,
-    limit: int = 100,
+    page: int = Query(1, ge=1, description="页码"),
+    size: int = Query(20, ge=1, le=100, description="每页数量"),
     resource: Optional[str] = None,
     action: Optional[str] = None,
     current_user: User = Depends(check_permission("role:read")),
     db: Session = Depends(get_db)
 ):
     """获取权限列表"""
-    permissions = RoleService.get_permissions(db, skip, limit, resource, action)
-    return permissions
+    return RoleService.get_permissions_paginated(db, page, size, resource, action)
 
 
 @router.get("/permissions/{permission_id}", response_model=PermissionSchema)
@@ -165,17 +165,16 @@ async def create_role(
         )
 
 
-@router.get("/", response_model=List[RoleSchema])
+@router.get("/", response_model=RoleListResponse)
 async def get_roles(
-    skip: int = 0,
-    limit: int = 100,
+    page: int = Query(1, ge=1, description="页码"),
+    size: int = Query(20, ge=1, le=100, description="每页数量"),
     is_active: Optional[bool] = None,
     current_user: User = Depends(check_permission("role:read")),
     db: Session = Depends(get_db)
 ):
     """获取角色列表"""
-    roles = RoleService.get_roles(db, skip, limit, is_active)
-    return roles
+    return RoleService.get_roles_paginated(db, page, size, is_active)
 
 
 @router.get("/{role_id}", response_model=RoleSchema)

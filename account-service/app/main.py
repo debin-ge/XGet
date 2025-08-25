@@ -34,6 +34,7 @@ async def startup():
     # 创建数据库表
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
+
     logger.info("服务启动完成")
 
 @app.on_event("shutdown")

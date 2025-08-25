@@ -194,8 +194,8 @@ async def stop_task(
 @router.get("/{task_id}/results", response_model=ResultsResponse)
 async def get_task_results(
     task_id: str,
-    skip: int = Query(0, ge=0),
-    limit: int = Query(100, ge=1, le=1000),
+    page: int = Query(1, ge=1, description="页码"),
+    size: int = Query(20, ge=1, le=100, description="每页数量"),
     data_type: Optional[str] = None,
     db: AsyncSession = Depends(get_db),
     current_user_id: str = Depends(get_current_user_id)
@@ -211,21 +211,18 @@ async def get_task_results(
         raise HTTPException(status_code=403, detail="Access denied: You can only access results of your own tasks")
     
     scraper_service = ScraperService()
-    results = await scraper_service.get_results(
+    results = await scraper_service.get_results_paginated(
         task_id=task_id,
         data_type=data_type,
-        skip=skip,
-        limit=limit
+        page=page,
+        size=size
     )
-    
-    # 计算页码
-    page = (skip // limit) + 1 if limit > 0 else 1
     
     return ResultsResponse.create(
         items=results["data"],
         total=results["total"],
-        page=page,
-        size=limit
+        page=results["page"],
+        size=results["size"]
     )
 
 @router.post("/batch", response_model=List[TaskResponse])
@@ -248,8 +245,8 @@ async def create_batch_tasks(
 async def search_results(
     query: str = Query(..., description="搜索查询字符串"),
     data_type: Optional[str] = None,
-    skip: int = Query(0, ge=0),
-    limit: int = Query(100, ge=1, le=1000),
+    page: int = Query(1, ge=1, description="页码"),
+    size: int = Query(20, ge=1, le=100, description="每页数量"),
     db: AsyncSession = Depends(get_db),
     current_user_id: str = Depends(get_current_user_id)
 ):
@@ -265,7 +262,7 @@ async def search_results(
             items=[],
             total=0,
             page=1,
-            size=limit
+            size=size
         )
     
     scraper_service = ScraperService()
@@ -280,20 +277,17 @@ async def search_results(
     # 添加任务ID限制
     query_dict["task_id"] = {"$in": user_task_ids}
     
-    results = await scraper_service.get_results(
+    results = await scraper_service.get_results_paginated(
         data_type=data_type,
         query=query_dict,
-        skip=skip,
-        limit=limit
+        page=page,
+        size=size
     )
-    
-    # 计算页码
-    page = (skip // limit) + 1 if limit > 0 else 1
     
     return ResultsResponse.create(
         items=results["data"],
         total=results["total"],
-        page=page,
-        size=limit
+        page=results["page"],
+        size=results["size"]
     )
 

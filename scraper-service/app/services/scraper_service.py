@@ -1,10 +1,8 @@
-from typing import List, Optional, Dict, Any
+from typing import List, Optional, Dict
 from ..db.database import mongodb
-from ..models.result import RESULT_TYPE_TWEET, RESULT_TYPE_USER, RESULT_TYPE_TOPIC, RESULT_TYPE_FOLLOWER
 from ..schemas.result import ResultCreate
 import uuid
 from datetime import datetime
-
 
 class ScraperService:
     def __init__(self):
@@ -45,16 +43,17 @@ class ScraperService:
             await self.results_collection.insert_many(results)
             
         return results
-
-    async def get_results(
+  
+    async def get_results_paginated(
         self,
         task_id: Optional[str] = None,
         data_type: Optional[str] = None,
         query: Optional[Dict] = None,
-        skip: int = 0,
-        limit: int = 100
+        page: int = 1,
+        size: int = 20
     ) -> Dict:
-        """获取采集结果"""
+        """获取分页采集结果（使用page/size参数，与其他服务保持一致）"""
+
         filter_query = {}
         
         if task_id:
@@ -70,13 +69,20 @@ class ScraperService:
                     
         total = await self.results_collection.count_documents(filter_query)
         
-        cursor = self.results_collection.find(filter_query).skip(skip).limit(limit).sort("created_at", -1)
-        results = await cursor.to_list(length=limit)
+        # 计算skip值
+        skip = (page - 1) * size
+        cursor = self.results_collection.find(filter_query).skip(skip).limit(size).sort("created_at", -1)
+        results = await cursor.to_list(length=size)
         
-        return {
+        result_data = {
             "total": total,
-            "data": results
+            "data": results,
+            "page": page,
+            "size": size,
+            "pages": (total + size - 1) // size if total > 0 else 0
         }
+        
+        return result_data
 
     async def get_result(self, result_id: str) -> Optional[Dict]:
         """获取单个结果"""

@@ -1,15 +1,14 @@
-from typing import List, Optional, Dict, Any
+from typing import List, Optional
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
-from sqlalchemy import update, delete, func
+from sqlalchemy import update, func
 from ..models.account import Account
 from ..schemas.account import AccountCreate, AccountUpdate, AccountListResponse
 from ..models.login_history import LoginHistory
 import uuid
-from time import time
+import time
 from datetime import datetime
 from ..core.logging import logger
-from ..core.config import settings 
 from .login_service import LoginService
 from .proxy_client import ProxyClient
 
@@ -36,6 +35,7 @@ class AccountService:
 
     async def get_accounts_paginated(self, page: int = 1, size: int = 20, active: Optional[bool] = None, login_method: Optional[str] = None, search: Optional[str] = None) -> AccountListResponse:
         """获取分页的账户列表"""
+        
         # 计算偏移量
         offset = (page - 1) * size
         
@@ -68,8 +68,10 @@ class AccountService:
         count_result = await self.db.execute(count_query)
         total = count_result.scalar()
         
-        # 返回分页响应
-        return AccountListResponse.create(accounts, total, page, size)
+        # 构建响应
+        response = AccountListResponse.create(accounts, total, page, size)
+        
+        return response
 
     async def get_accounts(self, skip: int = 0, limit: int = 100, active: Optional[bool] = None, include_deleted: bool = False) -> List[Account]:
         """保留原有方法以兼容性"""
@@ -86,15 +88,16 @@ class AccountService:
         return result.scalars().all()
 
     async def get_account(self, account_id: str, include_deleted: bool = False) -> Optional[Account]:
-        """获取单个账户，默认不包括已删除的账户"""
+        """获取单个账户，默认不包括已删除的账户""" 
         query = select(Account).filter(Account.id == account_id)
         
-
         if not include_deleted:
             query = query.filter(Account.is_deleted == False)
             
         result = await self.db.execute(query)
-        return result.scalars().first()
+        account = result.scalars().first()
+            
+        return account
 
     async def update_account(self, account_id: str, account_data: AccountUpdate) -> Optional[Account]:
 
@@ -103,6 +106,12 @@ class AccountService:
             return None
             
         update_data = account_data.dict(exclude_unset=True)
+        
+        if not update_data.get("password"):
+            update_data.pop("password")
+        if not update_data.get("email_password"):
+            update_data.pop("email_password")
+
         update_data["updated_at"] = datetime.now()
         
         await self.db.execute(
@@ -112,6 +121,7 @@ class AccountService:
             .values(**update_data)
         )
         await self.db.commit()
+        
         
         return await self.get_account(account_id)
 
@@ -193,37 +203,16 @@ class AccountService:
                 status = "FAILED"
 
                 return account
-                
-            # 准备账号信息
-            account_dict = {
-                "id": account_id,
-                "username": account.username,
-                "password": account.password,
-                "email": account.email,
-                "email_password": account.email_password
-            }
-            
-            proxy_dict = {
-                "type": proxy.get("protocol", "http"),
-                "ip": proxy.get("host"),
-                "port": proxy.get("port"),
-                "username": proxy.get("username"),
-                "password": proxy.get("password")
-            }
             
             # 根据登录方法选择不同的登录方式
             cookies_dict = {}
             if account.login_method == "TWITTER":
                 logger.info(f"使用Twitter方式登录账号: {account.username}")
-                cookies_dict = await self.login_service.login_with_twitter(account_dict, proxy_dict)
+                cookies_dict = await self.login_service.login_with_twitter(account, proxy)
             elif account.login_method == "GOOGLE":
-                logger.info(f"使用Google方式登录账号: {account.username}")
-                google_account = {
-                    "id": account_id,
-                    "email": account.email,
-                    "email_password": account.email_password
-                }
-                cookies_dict = await self.login_service.login_with_google(account_dict, google_account, proxy_dict)
+                logger.info(f"使用Google方式登录账号: {account.email}")
+
+                cookies_dict = await self.login_service.login_with_google(account, proxy)
             else:
                 error_msg = f"不支持的登录方法: {account.login_method}"
                 logger.error(error_msg)
@@ -232,16 +221,13 @@ class AccountService:
 
                 return account
             
-            # 计算响应时间（毫秒）
-            response_time = int((time.time() - start_time) * 1000)
-            
             # 更新账号信息
             if cookies_dict:
                 logger.info(f"账号 {account.username} 登录成功，获取到 {len(cookies_dict)} 个cookies")
                 account.cookies = cookies_dict
                 account.active = True
                 account.last_used = datetime.now()
-                account.proxy_id = proxy_id or proxy.get("id")
+                account.proxy_id = proxy_id or proxy.id
                 account.error_msg = None
 
                 status = "SUCCESS"
@@ -268,7 +254,7 @@ class AccountService:
             # 记录登录历史
             await self.record_login_history(
                 account_id=account_id,
-                proxy_id=proxy.get("id") if proxy else None,
+                proxy_id=proxy.id if proxy else None,
                 status=status,
                 error_msg=error_msg,
                 response_time=int((time.time() - start_time) * 1000)

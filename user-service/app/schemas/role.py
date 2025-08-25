@@ -1,6 +1,28 @@
 from pydantic import BaseModel
-from typing import Optional, List
+from typing import Optional, List, Generic, TypeVar
 from datetime import datetime
+
+T = TypeVar('T')
+
+class PaginatedResponse(BaseModel, Generic[T]):
+    """通用分页响应模式"""
+    items: List[T]
+    total: int
+    page: int
+    size: int
+    pages: int
+    
+    @classmethod
+    def create(cls, items: List[T], total: int, page: int, size: int):
+        """创建分页响应"""
+        pages = (total + size - 1) // size if total > 0 else 0
+        return cls(
+            items=items,
+            total=total,
+            page=page,
+            size=size,
+            pages=pages
+        )
 
 
 class PermissionBase(BaseModel):
@@ -48,6 +70,16 @@ class Role(RoleBase):
     
     class Config:
         from_attributes = True
+
+
+class RoleListResponse(PaginatedResponse[Role]):
+    """角色列表分页响应"""
+    pass
+
+
+class PermissionListResponse(PaginatedResponse[Permission]):
+    """权限列表分页响应"""
+    pass
 
 
 class UserRoleBase(BaseModel):

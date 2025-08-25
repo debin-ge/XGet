@@ -3,9 +3,10 @@ from sqlalchemy import and_
 from typing import Optional, List, Dict, Any
 from datetime import datetime
 import uuid
+from sqlalchemy import func
 
 from ..models.role import Role, Permission, UserRole
-from ..schemas.role import RoleCreate, RoleUpdate, PermissionCreate
+from ..schemas.role import RoleCreate, RoleUpdate, PermissionCreate, RoleListResponse, PermissionListResponse
 from ..core.logging import logger
 
 
@@ -60,6 +61,33 @@ class RoleService:
             query = query.filter(Role.is_active == is_active)
         
         return query.offset(skip).limit(limit).all()
+
+    @staticmethod
+    def get_roles_paginated(
+        db: Session,
+        page: int = 1,
+        size: int = 20,
+        is_active: Optional[bool] = None
+    ) -> RoleListResponse:
+        """获取分页角色列表（使用page/size参数，与其他服务保持一致）"""
+        query = db.query(Role)
+        count_query = db.query(func.count(Role.id))
+        
+        if is_active is not None:
+            query = query.filter(Role.is_active == is_active)
+            count_query = count_query.filter(Role.is_active == is_active)
+        
+        # 获取总数
+        total = count_query.scalar() or 0
+        
+        # 获取分页数据
+        offset = (page - 1) * size
+        roles = query.offset(offset).limit(size).all()
+        
+        # 构建响应
+        response = RoleListResponse.create(roles, total, page, size)
+        
+        return response
     
     @staticmethod
     def update_role(db: Session, role_id: str, role_data: RoleUpdate) -> Optional[Role]:
@@ -163,6 +191,39 @@ class RoleService:
             query = query.filter(Permission.action == action)
         
         return query.offset(skip).limit(limit).all()
+
+    @staticmethod
+    def get_permissions_paginated(
+        db: Session,
+        page: int = 1,
+        size: int = 20,
+        resource: Optional[str] = None,
+        action: Optional[str] = None
+    ) -> PermissionListResponse:
+        """获取分页权限列表（使用page/size参数，与其他服务保持一致）"""
+        
+        query = db.query(Permission)
+        count_query = db.query(func.count(Permission.id))
+        
+        if resource:
+            query = query.filter(Permission.resource == resource)
+            count_query = count_query.filter(Permission.resource == resource)
+        
+        if action:
+            query = query.filter(Permission.action == action)
+            count_query = count_query.filter(Permission.action == action)
+        
+        # 获取总数
+        total = count_query.scalar() or 0
+        
+        # 获取分页数据
+        offset = (page - 1) * size
+        permissions = query.offset(offset).limit(size).all()
+        
+        # 构建响应
+        response = PermissionListResponse.create(permissions, total, page, size)
+        
+        return response
     
     @staticmethod
     def assign_permissions_to_role(db: Session, role_id: str, permission_ids: List[str]) -> bool:

@@ -1,9 +1,8 @@
 import httpx
 from typing import Dict, Optional
-import logging
 from ..core.config import settings
 from ..core.logging import logger
-
+from ..schemas.proxy import Proxy
 
 class ProxyClient:
     """代理服务客户端，用于从代理服务获取代理信息"""
@@ -12,12 +11,12 @@ class ProxyClient:
         self.base_url = settings.PROXY_SERVICE_URL
         self.client = httpx.AsyncClient(timeout=10.0)
     
-    async def get_proxy(self, proxy_id: str) -> Optional[Dict]:
+    async def get_proxy(self, proxy_id: str) -> Optional[Proxy]:
         """获取指定ID的代理信息"""
         try:
             response = await self.client.get(f"{self.base_url}/api/v1/proxies/{proxy_id}")
             response.raise_for_status()
-            return response.json()
+            return Proxy(**response.json())
         except httpx.HTTPError as e:
             logger.error(f"获取代理信息失败: {e}")
             return None
@@ -26,7 +25,7 @@ class ProxyClient:
         self,
         country: Optional[str] = None,
         min_quality_score: Optional[float] = 0.6
-    ) -> Optional[Dict]:
+    ) -> Optional[Proxy]:
         """获取一个轮换代理"""
         try:
             params = {}
@@ -37,7 +36,7 @@ class ProxyClient:
                 
             response = await self.client.post(f"{self.base_url}/api/v1/proxies/rotate", params=params)
             response.raise_for_status()
-            return response.json()
+            return Proxy(**response.json())
         except httpx.HTTPError as e:
             logger.error(f"获取轮换代理失败: {e}")
             return None

@@ -3,13 +3,12 @@ from sqlalchemy import and_, or_
 from typing import Optional, List, Dict, Any
 from datetime import datetime, timedelta
 import uuid
-import json
+from sqlalchemy import func
 
 from ..models.user import User
-from ..models.role import Role, Permission, UserRole
+from ..models.role import Role, UserRole
 from ..models.session import UserSession
-from ..models.login_history import LoginHistory
-from ..schemas.user import UserCreate, UserUpdate, UserPasswordUpdate, UserPreferences
+from ..schemas.user import UserCreate, UserUpdate, UserPasswordUpdate, UserPreferences, UserListResponse
 from ..core.security import (
     get_password_hash, verify_password, create_access_token, 
     create_refresh_token, increment_login_attempts, clear_login_attempts,
@@ -61,7 +60,10 @@ class UserService:
     @staticmethod
     def get_user_by_id(db: Session, user_id: str) -> Optional[User]:
         """根据ID获取用户"""
-        return db.query(User).filter(User.id == user_id).first()
+        
+        user = db.query(User).filter(User.id == user_id).first()
+
+        return user
     
     @staticmethod
     def get_user_by_username(db: Session, username: str) -> Optional[User]:
@@ -91,6 +93,40 @@ class UserService:
             query = query.filter(User.is_verified == is_verified)
         
         return query.offset(skip).limit(limit).all()
+
+    @staticmethod
+    def get_users_paginated(
+        db: Session,
+        page: int = 1,
+        size: int = 20,
+        is_active: Optional[bool] = None,
+        is_verified: Optional[bool] = None
+    ) -> UserListResponse:
+        """获取分页用户列表（使用page/size参数，与其他服务保持一致）"""
+        
+        query = db.query(User)
+        count_query = db.query(func.count(User.id))
+        
+        if is_active is not None:
+            query = query.filter(User.is_active == is_active)
+            count_query = count_query.filter(User.is_active == is_active)
+        
+        if is_verified is not None:
+            query = query.filter(User.is_verified == is_verified)
+            count_query = count_query.filter(User.is_verified == is_verified)
+        
+        # 获取总数
+        total = count_query.scalar() or 0
+        
+        # 获取分页数据
+        offset = (page - 1) * size
+        users = query.offset(offset).limit(size).all()
+        
+        # 构建响应
+        response = UserListResponse.create(users, total, page, size)
+        
+        
+        return response
     
     @staticmethod
     def update_user(db: Session, user_id: str, user_data: UserUpdate) -> Optional[User]:
@@ -119,6 +155,7 @@ class UserService:
         user.updated_at = datetime.utcnow()
         db.commit()
         db.refresh(user)
+        
         
         logger.info(f"Updated user: {user.username}")
         return user
@@ -157,6 +194,7 @@ class UserService:
         user.is_active = False
         user.updated_at = datetime.utcnow()
         db.commit()
+        
         
         logger.info(f"Deleted user: {user.username}")
         return True

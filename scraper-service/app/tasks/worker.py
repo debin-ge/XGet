@@ -1,6 +1,6 @@
 import asyncio
 import json
-from typing import Dict, Any, Optional, Set
+from typing import Dict, Any, Optional
 from aiokafka import AIOKafkaConsumer, AIOKafkaProducer
 from ..core.config import settings
 from .twitter_scraper import TwitterScraper

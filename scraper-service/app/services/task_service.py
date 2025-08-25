@@ -1,4 +1,4 @@
-from typing import List, Optional, Dict, Any
+from typing import List, Optional
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 from sqlalchemy import update, delete, desc, func
@@ -6,8 +6,6 @@ from ..models.task import Task
 from ..schemas.task import TaskCreate, TaskUpdate, TaskListResponse
 import uuid
 from datetime import datetime
-import httpx
-from ..core.config import settings
 from ..core.logging import logger
 from .kafka_client import kafka_client
 
@@ -54,6 +52,7 @@ class TaskService:
         
         # 确保在返回之前刷新对象状态
         await self.db.refresh(task)
+        
         return task
 
     async def get_tasks(
@@ -115,13 +114,17 @@ class TaskService:
         result = await self.db.execute(query)
         tasks = result.scalars().all()
         
-        logger.debug(f"获取分页任务列表, total: {total}, page: {page}, size: {size}")
-        return TaskListResponse.create(tasks, total, page, size)
+        # 构建响应
+        response = TaskListResponse.create(tasks, total, page, size)
+        
+        return response
 
     async def get_task(self, task_id: str) -> Optional[Task]:
         """获取任务详情"""
         result = await self.db.execute(select(Task).filter(Task.id == task_id))
-        return result.scalars().first()
+        task = result.scalars().first()
+
+        return task
 
     async def get_task_by_name(self, task_name: str, user_id: str) -> Optional[Task]:
         """根据任务名称和用户ID获取任务"""

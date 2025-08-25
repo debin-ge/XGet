@@ -1,6 +1,28 @@
 from pydantic import BaseModel, EmailStr, validator
-from typing import Optional, List, Dict, Any
+from typing import Optional, List, Dict, Any, Generic, TypeVar
 from datetime import datetime
+
+T = TypeVar('T')
+
+class PaginatedResponse(BaseModel, Generic[T]):
+    """通用分页响应模式"""
+    items: List[T]
+    total: int
+    page: int
+    size: int
+    pages: int
+    
+    @classmethod
+    def create(cls, items: List[T], total: int, page: int, size: int):
+        """创建分页响应"""
+        pages = (total + size - 1) // size if total > 0 else 0
+        return cls(
+            items=items,
+            total=total,
+            page=page,
+            size=size,
+            pages=pages
+        )
 
 
 class UserBase(BaseModel):
@@ -124,4 +146,9 @@ class UserStatus(BaseModel):
     is_verified: bool
     is_locked: bool
     locked_until: Optional[datetime] = None
-    failed_attempts: int 
+    failed_attempts: int
+
+
+class UserListResponse(PaginatedResponse[User]):
+    """用户列表分页响应"""
+    pass 

@@ -7,6 +7,9 @@ from .db.database import engine, Base
 from .services.role_service import RoleService
 import uvicorn
 
+# Import models to ensure they are registered with SQLAlchemy
+from .models import user, login_history, role, session
+
 # 初始化日志系统
 initialize_logging(
     log_level=settings.LOG_LEVEL,

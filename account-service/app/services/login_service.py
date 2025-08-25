@@ -1,20 +1,21 @@
 from playwright.async_api import async_playwright
-from typing import Dict, Optional, Tuple
+from typing import Dict
 from ..core.logging import logger
 from ..core.config import settings
 from .proxy_client import ProxyClient
-from time import time
-
+import time
+from ..models.account import Account
+from ..schemas.proxy import Proxy
 
 class LoginService:
-    async def login_with_twitter(self, account: Dict, proxy: Dict) -> Dict:
+    async def login_with_twitter(self, account: Account, proxy: Proxy) -> Dict:
         """使用Twitter账号密码登录"""
         cookies_dict = {}
         proxy_client = ProxyClient()
         login_success = "FAILED"
         
         async with async_playwright() as p:
-            proxy_server = f"{proxy['type'].lower()}://{proxy['ip']}:{proxy['port']}"
+            proxy_server = f"{proxy.type.lower()}://{proxy.ip}:{proxy.port}"
             
             browser = await p.chromium.launch(
                 headless=True,
@@ -33,8 +34,8 @@ class LoginService:
             context = await browser.new_context(
                 proxy={
                     "server": proxy_server,
-                    "username": proxy["username"],
-                    "password": proxy["password"]
+                    "username": proxy.username,
+                    "password": proxy.password
                 }
             )
             
@@ -51,7 +52,7 @@ class LoginService:
                 username_input = await page.query_selector('input[name="text"]')
                 if not username_input:
                     return {}
-                await username_input.fill(account["username"])
+                await username_input.fill(account.username)
                 
                 # 点击下一步
                 next_btn = await page.query_selector('button:has-text("Next")')
@@ -64,7 +65,7 @@ class LoginService:
                 password_input = await page.query_selector('input[name="password"]')
                 if not password_input:
                     return {}
-                await password_input.fill(account["password"])
+                await password_input.fill(account.password)
                                 
                 # 点击登录
                 login_btn = await page.query_selector('button[data-testid="LoginForm_Login_Button"]')
@@ -83,34 +84,33 @@ class LoginService:
                 
             except Exception as e:
                 logger.error(f"登录失败: {e}")
+                raise e
 
             finally:
-                response_time = int((time.time() - start_time) * 1000)
                 await browser.close()
         
                 await proxy_client.record_proxy_usage(
-                    proxy_id=proxy['id'], 
+                    proxy_id=proxy.id, 
                     success=login_success,
-                    account_id=account["id"],
+                    account_id=account.id,
                     service_name=settings.PROJECT_NAME,
-                    response_time=response_time,
-                    proxy_ip=proxy["ip"],
-                    proxy_port=proxy["port"],
-                    account_username_email=account["username"] or account["email"],
-                    quality_score=proxy["quality_score"],
-                    latency=proxy["latency"]
+                    response_time=int((time.time() - start_time) * 1000),
+                    proxy_ip=proxy.ip,
+                    proxy_port=proxy.port,
+                    account_username_email=account.username or account.email,
+                    latency=proxy.latency
                 )
                 
         return cookies_dict
     
-    async def login_with_google(self, account: Dict, google_account: Dict, proxy: Dict) -> Dict:
+    async def login_with_google(self, account: Account, proxy: Proxy) -> Dict:
         """使用Google账号登录Twitter"""
         cookies_dict = {}
         proxy_client = ProxyClient()
         login_success = "FAILED"
         
         async with async_playwright() as playwright:
-            proxy_server = f"{proxy['type'].lower()}://{proxy['ip']}:{proxy['port']}"
+            proxy_server = f"{proxy.type.lower()}://{proxy.ip}:{proxy.port}"
             device = playwright.devices["Desktop Chrome"]
             
             browser = await playwright.chromium.launch(
@@ -133,8 +133,8 @@ class LoginService:
                 **device,
                 proxy={
                     "server": proxy_server,
-                    "username": proxy["username"],
-                    "password": proxy["password"]
+                    "username": proxy.username,
+                    "password": proxy.password
                 }
             )
             
@@ -188,7 +188,7 @@ class LoginService:
                     logger.error(f"未找到邮箱输入框")
                     return {}
 
-                await email_input.fill(google_account["email"])
+                await email_input.fill(account.email)
 
                 # 点击"下一步"
                 await popup.click('#identifierNext button', timeout=5000)
@@ -212,7 +212,7 @@ class LoginService:
                     logger.error(f"未找到密码输入框")
                     return {}
 
-                await password_input.fill(google_account["email_password"])
+                await password_input.fill(account.email_password)
 
                 # 点击"下一步"并等待弹窗关闭
                 await popup.click('#passwordNext button')
@@ -230,26 +230,25 @@ class LoginService:
                 # 获取cookies
                 cookies = await context.cookies()
                 cookies_dict = {c['name']: c['value'] for c in cookies}
-                login_success = "SUCCESS" if cookies_dict else "FAILED"
+                login_success = "SUCCESS" if len(cookies_dict) > 0 else "FAILED"
 
             except Exception as e:
                 logger.error(f"Google登录流程异常: {e}")
+                raise e
 
             finally:
-                response_time = int((time.time() - start_time) * 1000)
                 await browser.close()
         
                 await proxy_client.record_proxy_usage(
-                    proxy_id=proxy['id'], 
+                    proxy_id=proxy.id, 
                     success=login_success,
-                    account_id=account["id"],
+                    account_id=account.id,
                     service_name=settings.PROJECT_NAME,
-                    response_time=response_time,
-                    proxy_ip=proxy["ip"],
-                    proxy_port=proxy["port"],
-                    account_username_email=google_account["email"] or google_account["username"],
-                    quality_score=proxy["quality_score"],
-                    latency=proxy["latency"]
+                    response_time=int((time.time() - start_time) * 1000),
+                    proxy_ip=proxy.ip,
+                    proxy_port=proxy.port,
+                    account_username_email=account.email or account.username,
+                    latency=proxy.latency
                 )
 
         return cookies_dict

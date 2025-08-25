@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, status, Request
+from fastapi import APIRouter, Depends, HTTPException, status, Request, Query
 from sqlalchemy.orm import Session
 from typing import List, Optional
 from datetime import datetime
@@ -7,7 +7,8 @@ from ..db.database import get_db
 from ..models.user import User
 from ..schemas.user import (
     UserCreate, UserUpdate, User as UserSchema, UserWithRoles,
-    UserPasswordUpdate, UserPreferences, UserStatus, UserLogin, UserLoginResponse
+    UserPasswordUpdate, UserPreferences, UserStatus, UserLogin, UserLoginResponse,
+    UserListResponse
 )
 from ..services.user_service import UserService
 from ..core.security import get_current_user, get_current_active_user, check_permission
@@ -193,18 +194,17 @@ async def get_current_user_status(
 
 
 # 管理员接口
-@router.get("/", response_model=List[UserSchema])
+@router.get("/", response_model=UserListResponse)
 async def get_users(
-    skip: int = 0,
-    limit: int = 100,
+    page: int = Query(1, ge=1, description="页码"),
+    size: int = Query(20, ge=1, le=100, description="每页数量"),
     is_active: Optional[bool] = None,
     is_verified: Optional[bool] = None,
     current_user: User = Depends(check_permission("user:read")),
     db: Session = Depends(get_db)
 ):
     """获取用户列表（管理员）"""
-    users = UserService.get_users(db, skip, limit, is_active, is_verified)
-    return users
+    return UserService.get_users_paginated(db, page, size, is_active, is_verified)
 
 
 @router.get("/{user_id}", response_model=UserWithRoles)

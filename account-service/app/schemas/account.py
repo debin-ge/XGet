@@ -38,6 +38,8 @@ class AccountCreate(AccountBase):
 
 
 class AccountUpdate(BaseModel):
+    username: Optional[str] = None
+    password: Optional[str] = None
     email: Optional[str] = None
     email_password: Optional[str] = None
     proxy_id: Optional[str] = None
@@ -66,6 +68,7 @@ class AccountResponse(AccountBase):
 
 
 class AccountLogin(BaseModel):
+    account_id: str
     proxy_id: Optional[str] = None
     async_login: bool = False
 

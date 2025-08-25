@@ -1,7 +1,7 @@
-from typing import List, Optional, Dict, Any, Tuple
+from typing import List, Optional, Tuple, Dict, Any
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
-from sqlalchemy import update, delete, desc, asc, or_, and_, func, exists, String, Integer
+from sqlalchemy import update, delete, desc, asc, or_, and_, func, exists
 from ..models.proxy import Proxy, ProxyQuality, ProxyUsageHistory
 from ..schemas.proxy import (
     ProxyCreate, ProxyUpdate, ProxyCheckResult, ProxyQualityCreate, ProxyQualityUpdate,
@@ -15,7 +15,6 @@ import uuid
 from datetime import datetime, timedelta
 import aiohttp
 import random
-import json
 
 class ProxyService:
     def __init__(self, db: AsyncSession):
@@ -163,8 +162,10 @@ class ProxyService:
         result = await self.db.execute(query)
         proxies = result.scalars().all()
         
-        logger.debug(f"获取分页代理列表, total: {total}, page: {page}, size: {size}")
-        return ProxyListResponse.create(proxies, total, page, size)
+        # 构建响应
+        response = ProxyListResponse.create(proxies, total, page, size)
+   
+        return response
 
     async def get_proxy(self, proxy_id: str) -> Optional[Proxy]:
         """获取代理详情"""
