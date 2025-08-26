@@ -9,6 +9,8 @@ import uuid
 import time
 from datetime import datetime
 from ..core.logging import logger
+from ..core.cache import cache
+from ..core.redis import RedisManager
 from .login_service import LoginService
 from .proxy_client import ProxyClient
 
@@ -33,6 +35,7 @@ class AccountService:
         await self.db.refresh(account)
         return account
 
+    @cache(prefix="accounts_paginated", expire=120)  # 2分钟缓存
     async def get_accounts_paginated(self, page: int = 1, size: int = 20, active: Optional[bool] = None, login_method: Optional[str] = None, search: Optional[str] = None) -> AccountListResponse:
         """获取分页的账户列表"""
         
@@ -73,20 +76,7 @@ class AccountService:
         
         return response
 
-    async def get_accounts(self, skip: int = 0, limit: int = 100, active: Optional[bool] = None, include_deleted: bool = False) -> List[Account]:
-        """保留原有方法以兼容性"""
-        query = select(Account)
-        
-
-        if not include_deleted:
-            query = query.filter(Account.is_deleted == False)
-            
-        if active is not None:
-            query = query.filter(Account.active == active)
-        query = query.offset(skip).limit(limit)
-        result = await self.db.execute(query)
-        return result.scalars().all()
-
+    @cache(prefix="account", expire=300)  # 5分钟缓存
     async def get_account(self, account_id: str, include_deleted: bool = False) -> Optional[Account]:
         """获取单个账户，默认不包括已删除的账户""" 
         query = select(Account).filter(Account.id == account_id)
@@ -122,6 +112,8 @@ class AccountService:
         )
         await self.db.commit()
         
+        # 使该账户的缓存失效
+        await self.invalidate_account_cache(account_id)
         
         return await self.get_account(account_id)
 
@@ -147,6 +139,8 @@ class AccountService:
         
         if result.rowcount > 0:
             logger.info(f"成功软删除账户: {account_id}")
+            # 使该账户的缓存失效
+            await self.invalidate_account_cache(account_id)
             return True
         else:
             logger.warning(f"软删除账户失败: {account_id}")
@@ -231,6 +225,19 @@ class AccountService:
                 account.error_msg = None
 
                 status = "SUCCESS"
+                
+                # 缓存登录成功的账号信息（24小时）
+                cache_key = f"account:login_success:{account.id}"
+                await RedisManager.set_json(cache_key, {
+                    "id": account.id,
+                    "username": account.username,
+                    "email": account.email,
+                    "login_method": account.login_method,
+                    "cookies": account.cookies,
+                    "active": account.active,
+                    "last_used": account.last_used.isoformat() if account.last_used else None,
+                    "proxy_id": account.proxy_id
+                }, expire=86400)  # 24小时缓存
             else:
                 error_msg = "登录失败，未获取到cookies"
                 logger.error(f"账号 {account.username} {error_msg}")
@@ -262,3 +269,23 @@ class AccountService:
 
             await self.db.commit()
             await self.db.refresh(account)
+
+    async def invalidate_account_cache(self, account_id: str) -> int:
+        """
+        使指定账户的缓存失效
+        :param account_id: 账户ID
+        :return: 删除的缓存键数量
+        """
+        # 删除账户相关的所有缓存
+        patterns = [
+            f"account:*{account_id}*",
+            f"accounts_paginated:*",  # 分页缓存也需要失效
+            f"account:login_success:{account_id}"
+        ]
+        
+        deleted_count = 0
+        for pattern in patterns:
+            deleted_count += await RedisManager.delete_keys(pattern)
+        
+        logger.info(f"已失效账户 {account_id} 的 {deleted_count} 个缓存键")
+        return deleted_count
