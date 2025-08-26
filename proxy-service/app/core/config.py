@@ -12,7 +12,9 @@ class Settings(BaseSettings):
     POSTGRES_DB: str = os.getenv("POSTGRES_DB", "proxy_db")
     SQLALCHEMY_DATABASE_URI: Optional[str] = os.getenv("DATABASE_URL")
     
-    REDIS_URL: str = os.getenv("REDIS_URL", "redis://redis:6379/0")
+    REDIS_URL: str = os.getenv("REDIS_URL", "redis://redis:6379/1")
+    REDIS_MAX_CONNECTIONS: int = int(os.getenv("REDIS_MAX_CONNECTIONS", "10"))
+    REDIS_TIMEOUT: int = int(os.getenv("REDIS_TIMEOUT", "5"))
     
     # 日志配置
     LOG_LEVEL: str = os.getenv("LOG_LEVEL", "INFO")

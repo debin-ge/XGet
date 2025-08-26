@@ -8,6 +8,8 @@ from ..schemas.proxy import (
     ProxyUsageHistoryCreate, ProxyUsageHistoryFilter, ProxyListResponse, ProxyUsageHistoryResponse
 )
 from ..core.logging import logger
+from ..core.cache import cache
+from ..core.redis import RedisManager
 from .ip_geolocation_service import ip_geolocation_service
 from .account_client import AccountClient
 from .scraper_client import ScraperClient
@@ -167,6 +169,7 @@ class ProxyService:
    
         return response
 
+    @cache(prefix="proxy", expire=180)  # 3分钟缓存
     async def get_proxy(self, proxy_id: str) -> Optional[Proxy]:
         """获取代理详情"""
         result = await self.db.execute(select(Proxy).filter(Proxy.id == proxy_id))
@@ -194,6 +197,8 @@ class ProxyService:
         proxy = await self.get_proxy(proxy_id)
         if proxy:
             logger.info(f"更新代理成功, proxy_id: {proxy_id}, fields: {list(update_data.keys())}")
+            # 清理相关缓存
+            await self.invalidate_proxy_cache(proxy_id)
         else:
             logger.error(f"更新代理失败，代理不存在, proxy_id: {proxy_id}")
         
@@ -209,11 +214,14 @@ class ProxyService:
         success = result.rowcount > 0
         if success:
             logger.info(f"删除代理成功, proxy_id: {proxy_id}")
+            # 清理相关缓存
+            await self.invalidate_proxy_cache(proxy_id)
         else:
             logger.error(f"删除代理失败，代理不存在, proxy_id: {proxy_id}")
         
         return success
 
+    @cache(prefix="available_proxies", expire=30)  # 30秒缓存
     async def get_available_proxies(
         self,
         limit: int = 10,
@@ -458,6 +466,7 @@ class ProxyService:
         
         return proxies
         
+    @cache(prefix="proxy_quality", expire=120)  # 2分钟缓存
     async def get_proxy_quality(self, proxy_id: str) -> Optional[ProxyQuality]:
         """获取代理质量记录"""
         result = await self.db.execute(
@@ -499,6 +508,8 @@ class ProxyService:
         quality = await self.get_proxy_quality(proxy_id)
         if quality:
             logger.info(f"更新代理质量记录成功, proxy_id: {proxy_id}, fields: {list(update_data.keys())}")
+            # 清理相关缓存
+            await self.invalidate_proxy_cache(proxy_id)
         else:
             logger.error(f"更新代理质量记录失败，记录不存在, proxy_id: {proxy_id}")
         
@@ -940,3 +951,18 @@ class ProxyService:
         except Exception as e:
             logger.error(f"Error getting proxies quality info: {str(e)}")
             return [], 0
+
+    async def invalidate_proxy_cache(self, proxy_id: str = None):
+        """清理代理相关缓存"""
+        try:
+            if proxy_id:
+                # 清理特定代理的缓存
+                await RedisManager.delete_keys(f"proxy:*{proxy_id}*")
+                await RedisManager.delete_keys(f"proxy_quality:*{proxy_id}*")
+            
+            # 清理代理列表相关的缓存
+            await RedisManager.delete_keys(f"available_proxies:*")
+            
+            logger.info(f"清理代理缓存成功, proxy_id: {proxy_id}")
+        except Exception as e:
+            logger.error(f"清理代理缓存失败: {str(e)}")
