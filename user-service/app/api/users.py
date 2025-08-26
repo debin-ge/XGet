@@ -57,12 +57,14 @@ async def login_user(
         session_data = UserService.create_user_session(
             db, user, client_ip, user_agent
         )
-        
+
+        logger.info("expires_at is:"+session_data["expires_at"].strftime("%Y-%m-%d %H:%M:%S"))
+
         return {
             "access_token": session_data["access_token"],
             "refresh_token": session_data["refresh_token"],
             "token_type": "bearer",
-            "expires_in": 1800,  # 30 minutes
+            "expires_at": session_data["expires_at"].strftime("%Y-%m-%d %H:%M:%S"),
             "user": user
         }
         

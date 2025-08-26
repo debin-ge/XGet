@@ -265,7 +265,8 @@ class UserService:
         return {
             "access_token": access_token,
             "refresh_token": refresh_token,
-            "session_id": session.id
+            "session_id": session.id,
+            "expires_at":session.expires_at
         }
     
     @staticmethod
