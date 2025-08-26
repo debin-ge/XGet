@@ -17,49 +17,34 @@ jobs:
         uses: actions/checkout@v4
 
       # 步骤 2: 设置 SSH
-      # 使用一个非常稳定且流行的 Action 来设置 SSH 私钥，以便后续的 rsync 和 ssh 命令可以使用
       - name: Setup SSH Agent
         uses: webfactory/ssh-agent@v0.9.0
         with:
           ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
 
-      # 步骤 3: 手动运行 rsync 命令进行文件同步
-      # 我们直接执行 rsync 命令，不再依赖第三方 rsync Action
-      - name: Sync Files to Server via rsync
+      # 步骤 3: 运行一个极简的 rsync 命令进行测试
+      - name: Sync Files to Server via rsync (Simplified)
         run: |
-          # -a: 归档模式, -v: 详细输出, -z: 压缩
-          # --delete: 删除目标目录中源目录不存在的文件
-          # --exclude: 排除不需要同步的文件/目录
-          rsync -avz --delete \
-            --exclude=".git*"
-            --exclude=".github/"
-            --exclude=".idea/"
-            --exclude=".vscode/"
-            --exclude="*.md"
-            --exclude="node_modules/"
-            --exclude=".env.development"
-            -e "ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null"
+          echo "Attempting a minimal rsync to ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}:${{ secrets.REMOTE_PATH }}"
+          # 我们移除了所有额外参数，只保留核心功能，用于测试连接和路径是否正确
+          rsync -avz -e "ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null" \
             ./ ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}:${{ secrets.REMOTE_PATH }}
 
-      # 步骤 4: 在服务器上执行部署命令 (此步骤保持不变)
+      # 步骤 4: 在服务器上执行部署命令 (如果上一步成功)
       - name: Execute Deployment Commands on Server
+        if: success()
         uses: appleboy/ssh-action@master
         with:
           host: ${{ secrets.SSH_HOST }}
           username: ${{ secrets.SSH_USER }}
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           script: |
-            # 进入项目目录
             cd ${{ secrets.REMOTE_PATH }}
-
-            # 自动检测 docker-compose 或 docker compose 命令
             COMPOSE_COMMAND="docker compose"
             if ! command -v $COMPOSE_COMMAND &> /dev/null; then
               COMPOSE_COMMAND="docker-compose"
             fi
             echo "Using compose command: $COMPOSE_COMMAND"
-
-            # 构建、停止、启动 Docker 容器
             echo "Building new Docker images..."
             $COMPOSE_COMMAND build --no-cache
             echo "Stopping and removing old containers..."
