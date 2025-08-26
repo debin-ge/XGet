@@ -13,9 +13,13 @@ __pycache__/
 .Python
 build/
 
+# Node
+/frontend-service/node_modules/
+/frontend-service/package-lock.json
 
 # 环境变量和密钥
 .env
+.env.production
 .env.local
 .env.dev
 .env.prod
@@ -33,6 +37,7 @@ secrets/
 .pydevproject
 .settings/
 .clocignore
+.cursor
 
 # 临时文件
 *.tmp
