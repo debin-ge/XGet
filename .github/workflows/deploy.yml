@@ -1,9 +1,7 @@
-
 # .github/workflows/deploy.yml
 
 name: Deploy to Production Server
 
-# 触发器：当代码推送到 main 分支时触发
 on:
   push:
     branches:
@@ -11,42 +9,39 @@ on:
 
 jobs:
   deploy:
-    # 运行环境：使用最新的 Ubuntu
     runs-on: ubuntu-latest
 
     steps:
       # 步骤 1: 检出代码
-      # 拉取仓库的最新代码到 Actions 的工作区
       - name: Checkout Code
         uses: actions/checkout@v4
 
-      # 步骤 2: 同步文件到服务器
-      # 使用 rsync 将代码高效地传输到目标服务器
-      - name: Sync Files to Server
-        uses: burnett01/rsync-deploy@v6
+      # 步骤 2: 设置 SSH
+      # 使用一个非常稳定且流行的 Action 来设置 SSH 私钥，以便后续的 rsync 和 ssh 命令可以使用
+      - name: Setup SSH Agent
+        uses: webfactory/ssh-agent@v0.9.0
         with:
-          # SSH 私钥，用于连接服务器
-          SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
-          # 远程服务器的主机名或 IP 地址
-          REMOTE_HOST: ${{ secrets.SSH_HOST }}
-          # 远程服务器的登录用户名
-          REMOTE_USER: ${{ secrets.SSH_USER }}
-          # 源目录，"." 表示当前仓库的根目录
-          SOURCE: "./"
-          # 目标目录，在服务器上的绝对路径
-          REMOTE_TARGET: ${{ secrets.REMOTE_PATH }}
-          # rsync 排除项，避免不必要的文件传输
-          EXCLUDE: |
-            .git*
-            .github/
-            .idea/
-            .vscode/
-            *.md
-            node_modules/
-            .env.development
+          ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
 
-      # 步骤 3: 在服务器上执行部署命令
-      # 通过 SSH 连接到服务器，并执行 Docker Compose 命令
+      # 步骤 3: 手动运行 rsync 命令进行文件同步
+      # 我们直接执行 rsync 命令，不再依赖第三方 rsync Action
+      - name: Sync Files to Server via rsync
+        run: |
+          # -a: 归档模式, -v: 详细输出, -z: 压缩
+          # --delete: 删除目标目录中源目录不存在的文件
+          # --exclude: 排除不需要同步的文件/目录
+          rsync -avz --delete \
+            --exclude=".git*"
+            --exclude=".github/"
+            --exclude=".idea/"
+            --exclude=".vscode/"
+            --exclude="*.md"
+            --exclude="node_modules/"
+            --exclude=".env.development"
+            -e "ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null"
+            ./ ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}:${{ secrets.REMOTE_PATH }}
+
+      # 步骤 4: 在服务器上执行部署命令 (此步骤保持不变)
       - name: Execute Deployment Commands on Server
         uses: appleboy/ssh-action@master
         with:
@@ -57,28 +52,19 @@ jobs:
             # 进入项目目录
             cd ${{ secrets.REMOTE_PATH }}
 
-            # 确保 docker-compose 或 docker compose 命令可用
-            # 优先使用 "docker compose" (v2)，如果失败则尝试 "docker-compose" (v1)
+            # 自动检测 docker-compose 或 docker compose 命令
             COMPOSE_COMMAND="docker compose"
             if ! command -v $COMPOSE_COMMAND &> /dev/null; then
               COMPOSE_COMMAND="docker-compose"
             fi
-
-            # 输出使用的命令
             echo "Using compose command: $COMPOSE_COMMAND"
 
-            # 构建新的 Docker 镜像（--no-cache 可以确保最新构建）
+            # 构建、停止、启动 Docker 容器
             echo "Building new Docker images..."
             $COMPOSE_COMMAND build --no-cache
-
-            # 停止并删除旧的容器、网络
             echo "Stopping and removing old containers..."
             $COMPOSE_COMMAND down
-
-            # 启动新的容器（-d 表示在后台运行）
             echo "Starting new containers..."
             $COMPOSE_COMMAND up -d
-
-            # 清理不再使用的 Docker 镜像（可选，但推荐）
             echo "Pruning unused Docker images..."
             docker image prune -f
