@@ -23,7 +23,7 @@ jobs:
       # 步骤 2: 同步文件到服务器
       # 使用 rsync 将代码高效地传输到目标服务器
       - name: Sync Files to Server
-        uses: easingthemes/rsync-deploy@v2.3
+        uses: burnett01/rsync-deploy@v6
         with:
           # SSH 私钥，用于连接服务器
           SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
