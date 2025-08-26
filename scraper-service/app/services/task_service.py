@@ -7,6 +7,8 @@ from ..schemas.task import TaskCreate, TaskUpdate, TaskListResponse
 import uuid
 from datetime import datetime
 from ..core.logging import logger
+from ..core.cache import cache
+from ..core.redis import RedisManager
 from .kafka_client import kafka_client
 
 class TaskService:
@@ -55,6 +57,7 @@ class TaskService:
         
         return task
 
+    @cache(prefix="tasks", expire=120)  # 2分钟缓存
     async def get_tasks(
         self, 
         skip: int = 0, 
@@ -77,6 +80,7 @@ class TaskService:
         result = await self.db.execute(query)
         return result.scalars().all()
 
+    @cache(prefix="tasks_paginated", expire=120)  # 2分钟缓存
     async def get_tasks_paginated(
         self,
         page: int = 1,
@@ -119,6 +123,7 @@ class TaskService:
         
         return response
 
+    @cache(prefix="task", expire=180)  # 3分钟缓存
     async def get_task(self, task_id: str) -> Optional[Task]:
         """获取任务详情"""
         result = await self.db.execute(select(Task).filter(Task.id == task_id))
@@ -126,6 +131,7 @@ class TaskService:
 
         return task
 
+    @cache(prefix="task_by_name", expire=180)  # 3分钟缓存
     async def get_task_by_name(self, task_name: str, user_id: str) -> Optional[Task]:
         """根据任务名称和用户ID获取任务"""
         result = await self.db.execute(
@@ -145,6 +151,9 @@ class TaskService:
         )
         await self.db.commit()
         
+        # 清除相关缓存
+        await self.invalidate_task_cache(task_id)
+        
         return await self.get_task(task_id)
 
     async def delete_task(self, task_id: str) -> bool:
@@ -153,6 +162,11 @@ class TaskService:
             delete(Task).where(Task.id == task_id)
         )
         await self.db.commit()
+        
+        # 清除相关缓存
+        if result.rowcount > 0:
+            await self.invalidate_task_cache(task_id)
+        
         return result.rowcount > 0
 
     async def start_task(self, task_id: str) -> Optional[Task]:
@@ -229,3 +243,18 @@ class TaskService:
             task_id, 
             TaskUpdate(status="STOPPED")
         )
+
+    async def invalidate_task_cache(self, task_id: str):
+        """清除任务相关的缓存"""
+        try:
+            # 清除单个任务缓存
+            await RedisManager.delete_keys(f"task:{task_id}*")
+            await RedisManager.delete_keys(f"task:{task_id}:*")
+            # 清除任务列表缓存
+            await RedisManager.delete_keys(f"tasks:*")
+            await RedisManager.delete_keys(f"tasks_paginated:*")
+            await RedisManager.delete_keys(f"task_by_name:*")
+            logger.info(f"Cleared cache for task {task_id}")
+        except Exception as e:
+            logger.warning(f"Failed to clear task cache for {task_id}: {e}")
+

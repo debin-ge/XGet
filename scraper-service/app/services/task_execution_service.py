@@ -7,6 +7,9 @@ from typing import Optional, List
 
 from ..models.task_execution import TaskExecution
 from ..schemas.task_execution import TaskExecutionCreate, TaskExecutionUpdate, TaskExecutionListResponse
+from ..core.cache import cache
+from ..core.redis import RedisManager
+from ..core.logging import logger
 
 
 class TaskExecutionService:
@@ -54,20 +57,29 @@ class TaskExecutionService:
             
         await self.db.commit()
         await self.db.refresh(execution)
+        
+        # 清除相关缓存
+        await self.invalidate_execution_cache(execution_id)
+        if execution.task_id:
+            await self.invalidate_task_executions_cache(execution.task_id)
+        
         return execution
 
+    @cache(prefix="execution", expire=120)  # 2分钟缓存
     async def get_execution(self, execution_id: str) -> Optional[TaskExecution]:
         """获取任务执行记录"""
         query = select(TaskExecution).where(TaskExecution.id == execution_id)
         result = await self.db.execute(query)
         return result.scalars().first()
 
+    @cache(prefix="executions_by_task", expire=120)  # 2分钟缓存
     async def get_executions_by_task(self, task_id: str) -> List[TaskExecution]:
         """获取任务的所有执行记录"""
         query = select(TaskExecution).where(TaskExecution.task_id == task_id).order_by(TaskExecution.started_at.desc())
         result = await self.db.execute(query)
         return result.scalars().all()
 
+    @cache(prefix="executions_by_task_paginated", expire=120)  # 2分钟缓存
     async def get_executions_by_task_paginated(
         self,
         task_id: str,
@@ -99,4 +111,40 @@ class TaskExecutionService:
             completed_at=now,
             error_message=error_message
         )
-        return await self.update_execution(execution_id, update_data) 
+        
+        # 更新执行记录并清除缓存
+        result = await self.update_execution(execution_id, update_data)
+        
+        # 如果执行完成，清除任务相关的缓存
+        if result and status in ["COMPLETED", "FAILED"]:
+            task_execution = await self.get_execution(execution_id)
+            if task_execution and task_execution.task_id:
+                # 清除任务相关的缓存，因为任务状态可能已改变
+                await self.invalidate_task_executions_cache(task_execution.task_id)
+                # 清除任务列表缓存
+                await RedisManager.delete_keys(f"tasks:*")
+                await RedisManager.delete_keys(f"tasks_paginated:*")
+        
+        return result
+
+    async def invalidate_execution_cache(self, execution_id: str):
+        """清除任务执行相关的缓存"""
+        try:
+            # 清除单个执行记录缓存
+            await RedisManager.delete_keys(f"execution:{execution_id}*")
+            await RedisManager.delete_keys(f"execution:{execution_id}:*")
+            # 清除执行记录列表缓存
+            await RedisManager.delete_keys(f"executions_by_task:*")
+            await RedisManager.delete_keys(f"executions_by_task_paginated:*")
+            logger.info(f"Cleared cache for execution {execution_id}")
+        except Exception as e:
+            logger.warning(f"Failed to clear execution cache for {execution_id}: {e}")
+
+    async def invalidate_task_executions_cache(self, task_id: str):
+        """清除任务所有执行记录的缓存"""
+        try:
+            await RedisManager.delete_keys(f"executions_by_task:{task_id}*")
+            await RedisManager.delete_keys(f"executions_by_task_paginated:{task_id}*")
+            logger.info(f"Cleared cache for all executions of task {task_id}")
+        except Exception as e:
+            logger.warning(f"Failed to clear executions cache for task {task_id}: {e}")
