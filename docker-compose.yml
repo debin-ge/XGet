@@ -213,6 +213,22 @@ services:
       - xget-network
     restart: unless-stopped
 
+  # 前端服务
+  frontend-service:
+    build:
+      context: ./frontend-service
+      dockerfile: Dockerfile
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=production
+      - VITE_API_BASE_URL=http://api-gateway:8000
+    depends_on:
+      - api-gateway
+    networks:
+      - xget-network
+    restart: unless-stopped
+
   # PostgreSQL数据库
   postgres:
     image: postgres:16
