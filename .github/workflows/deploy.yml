@@ -58,7 +58,7 @@ jobs:
 
             echo "--- Deploying Application ---"
             echo "Building new Docker images..."
-            $COMPOSE_COMMAND build --no-cache
+            $COMPOSE_COMMAND build
 
             echo "Stopping and removing old containers..."
             $COMPOSE_COMMAND down
