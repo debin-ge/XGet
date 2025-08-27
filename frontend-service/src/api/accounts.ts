@@ -1,4 +1,4 @@
-import request from '../utils/request'
+import request from '@/utils/request'
 import type { Account, AccountCreateParams, AccountUpdateParams, AccountLoginResponse, AccountLoginParams } from '../types/account'
 
 export interface AccountListResponse {

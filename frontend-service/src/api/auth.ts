@@ -1,4 +1,4 @@
-import request from './index'
+import request from '@/utils/request'
 import type { LoginParams, LoginResponse, RegisterParams } from '@/types/auth'
 
 // 用户登录

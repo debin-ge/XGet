@@ -1,4 +1,4 @@
-import request from './index'
+import request from '@/utils/request'
 import type { DashboardStats, SystemStatus } from '@/types/dashboard'
 
 // 获取仪表盘统计数据

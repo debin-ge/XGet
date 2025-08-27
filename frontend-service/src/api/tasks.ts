@@ -1,4 +1,4 @@
-import request from '../utils/request'
+import request from '@/utils/request'
 import type { Task, TaskCreateParams, TaskListResponse, TaskType } from '../types/task'
 
 export interface TaskListParams {
