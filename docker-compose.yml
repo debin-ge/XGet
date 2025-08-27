@@ -222,7 +222,9 @@ services:
       - "3000:3000"
     environment:
       - NODE_ENV=production
-      - VITE_API_BASE_URL=http://api-gateway:8000
+      - VITE_API_BASE_URL=http://api-gateway:8000/api/v1
+      - VITE_APP_TITLE=XGet数据采集平台
+      - VITE_NODE_ENV=production
     depends_on:
       - api-gateway
     networks:
