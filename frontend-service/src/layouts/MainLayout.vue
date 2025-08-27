@@ -132,7 +132,7 @@ const toggleSidebar = () => {
   appStore.toggleSidebar()
 }
 
-const handleUserCommand = (command: string) => {
+const handleUserCommand = async (command: string) => {
   switch (command) {
     case 'profile':
       // 跳转到个人资料页面
@@ -141,8 +141,17 @@ const handleUserCommand = (command: string) => {
       // 跳转到设置页面
       break
     case 'logout':
-      authStore.logout()
-      router.push('/login')
+      try {
+        await authStore.logout()
+        router.push('/login')
+      } catch (error) {
+        console.error('退出登录失败:', error)
+        // 即使API调用失败，也强制清理本地数据并跳转
+        authStore.user = null
+        authStore.token = null
+        authStore.refreshToken = null
+        router.push('/login')
+      }
       break
   }
 }

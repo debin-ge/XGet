@@ -169,6 +169,7 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import { accountService } from '../../services/accountService'
 import * as accountApi from '../../api/accounts'
 import type { Account, AccountListParams } from '../../types/account'
+import { Search, Plus, Refresh } from '@element-plus/icons-vue'
 
 const router = useRouter()
 
@@ -217,7 +218,7 @@ const loadAccounts = async () => {
     if (filterStatus.value) {
       params.active = filterStatus.value === 'active' ? true : filterStatus.value === 'inactive' ? false : undefined
     }
-    
+    console.log("get accounts")
     const data = await accountApi.getAccounts(params)
     accounts.value = data.items as Account[]
     total.value = data.total

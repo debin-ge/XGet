@@ -130,6 +130,7 @@ import { ElMessage } from 'element-plus'
 import { getProxyHistory } from '../../api/proxies'
 import type { ProxyHistoryItem, ProxyHistoryListParams } from '../../types/proxy'
 import { watchDebounced } from '@vueuse/core'
+import { Search, Download, Refresh } from '@element-plus/icons-vue'
 
 const loading = ref(false)
 const accountEmailQuery = ref('')

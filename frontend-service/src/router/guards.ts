@@ -19,7 +19,6 @@ export function setupRouterGuards(router: Router) {
     
     // 检查是否需要认证
     const requiresAuth = to.meta?.requiresAuth !== false
-    console.log("requiresAuth: "+requiresAuth)
     if (requiresAuth) {
       // 需要认证的页面
       if (!authStore.isAuthenticated) {

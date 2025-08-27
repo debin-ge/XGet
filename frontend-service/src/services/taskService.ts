@@ -137,19 +137,6 @@ class TaskService {
   }
 
   /**
-   * 获取任务日志
-   */
-  async getTaskLogs(id: string): Promise<string[]> {
-    try {
-      const result = await taskApi.getTaskLogs(id)
-      return result.logs
-    } catch (error) {
-      ElMessage.error('获取任务日志失败')
-      throw error
-    }
-  }
-
-  /**
    * 获取任务结果
    */
   async getTaskResults(id: string, params: PaginationParams): Promise<PaginatedResponse<any>> {
@@ -157,31 +144,6 @@ class TaskService {
       return await taskApi.getTaskResults(id, params)
     } catch (error) {
       ElMessage.error('获取任务结果失败')
-      throw error
-    }
-  }
-
-  /**
-   * 导出任务结果
-   */
-  async exportTaskResults(id: string, format: 'csv' | 'json' | 'xlsx', taskName: string): Promise<void> {
-    try {
-      ElMessage.info('正在导出数据...')
-      const blob = await taskApi.exportTaskResults(id, format)
-      
-      // 创建下载链接
-      const url = window.URL.createObjectURL(blob)
-      const link = document.createElement('a')
-      link.href = url
-      link.download = `${taskName}_results.${format}`
-      link.click()
-      
-      // 清理URL对象
-      window.URL.revokeObjectURL(url)
-      
-      ElMessage.success('数据导出成功')
-    } catch (error) {
-      ElMessage.error('数据导出失败')
       throw error
     }
   }
@@ -241,31 +203,6 @@ class TaskService {
       const minutes = Math.floor((seconds % 3600) / 60)
       return `${hours}小时${minutes}分`
     }
-  }
-
-  /**
-   * 验证任务表单数据
-   */
-  validateTaskForm(data: TaskCreateParams): string[] {
-    const errors: string[] = []
-
-    if (!data.name?.trim()) {
-      errors.push('任务名称不能为空')
-    }
-
-    if (!data.type) {
-      errors.push('请选择任务类型')
-    }
-
-    if (!data.config.target?.trim()) {
-      errors.push('目标参数不能为空')
-    }
-
-    if (data.config.max_results && data.config.max_results <= 0) {
-      errors.push('最大结果数必须大于0')
-    }
-
-    return errors
   }
 }
 

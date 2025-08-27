@@ -118,6 +118,8 @@ import { ElMessage } from 'element-plus'
 import type { ProxyQuality } from '../../types/proxy'
 import { getProxyQuality } from '../../api/proxies'
 import { watchDebounced } from '@vueuse/core'
+import { Search, Refresh } from '@element-plus/icons-vue'
+
 const loading = ref(false)
 const searchQuery = ref('')
 const qualityFilter = ref('')
