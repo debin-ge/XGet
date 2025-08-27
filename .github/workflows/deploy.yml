@@ -22,34 +22,53 @@ jobs:
         with:
           ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
 
-      # 步骤 3: 运行一个极简的 rsync 命令进行测试
-      - name: Sync Files to Server via rsync (Simplified)
-        run: |
-          echo "Attempting a minimal rsync to ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}:${{ secrets.REMOTE_PATH }}"
-          # 我们移除了所有额外参数，只保留核心功能，用于测试连接和路径是否正确
-          rsync -avz -e "ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null" \
-            ./ ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}:${{ secrets.REMOTE_PATH }}
-
-      # 步骤 4: 在服务器上执行部署命令 (如果上一步成功)
-      - name: Execute Deployment Commands on Server
-        if: success()
+      # 步骤 3: 在服务器上执行 git 部署命令
+      - name: Execute Git Deployment Commands on Server
         uses: appleboy/ssh-action@master
         with:
           host: ${{ secrets.SSH_HOST }}
           username: ${{ secrets.SSH_USER }}
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           script: |
+            # 严格模式：任何命令失败则立即退出
+            set -e
+
+            # 进入项目目录
             cd ${{ secrets.REMOTE_PATH }}
-            COMPOSE_COMMAND="docker compose"
-            if ! command -v $COMPOSE_COMMAND &> /dev/null; then
-              COMPOSE_COMMAND="docker-compose"
+            echo "Project Directory: $(pwd)"
+
+            echo "--- Pulling Latest Code ---"
+            # 拉取最新代码
+            git fetch origin main
+            git reset --hard origin/main
+            git clean -fd
+
+            echo "--- Checking Docker & Docker Compose ---"
+            docker --version
+            
+            # 更稳健地自动检测 docker compose (v2) 或 docker-compose (v1)
+            if docker compose version &> /dev/null; then
+                COMPOSE_COMMAND="docker compose"
+            else
+                COMPOSE_COMMAND="docker-compose"
             fi
-            echo "Using compose command: $COMPOSE_COMMAND"
+            
+            echo "Using compose command: '$COMPOSE_COMMAND'"
+            $COMPOSE_COMMAND --version
+
+            echo "--- Deploying Application ---"
             echo "Building new Docker images..."
-            $COMPOSE_COMMAND build
+            $COMPOSE_COMMAND build --no-cache
+
             echo "Stopping and removing old containers..."
             $COMPOSE_COMMAND down
+
             echo "Starting new containers..."
             $COMPOSE_COMMAND up -d
-            echo "Pruning unused Docker images..."
-            docker image prune -f
+
+            echo "--- Verifying Running Containers ---"
+            # 等待几秒钟让容器有时间启动
+            sleep 5 
+            $COMPOSE_COMMAND ps
+
+            echo "--- Deployment Successful ---"
