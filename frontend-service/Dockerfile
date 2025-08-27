@@ -13,9 +13,6 @@ RUN npm ci
 # 复制源代码
 COPY . .
 
-# 构建参数用于环境变量
-ARG VITE_API_BASE_URL
-
 # 构建应用（传递环境变量）
 RUN VITE_API_BASE_URL=${VITE_API_BASE_URL} npm run build
 

@@ -58,9 +58,7 @@ jobs:
 
             echo "--- Deploying Application ---"
             echo "Building new Docker images..."
-            # 构建前端服务时传递生产环境API URL
-            $COMPOSE_COMMAND build --build-arg VITE_API_BASE_URL=http://74.50.127.133:3000/api/v1 frontend-service
-            # 构建其他服务
+            # 构建所有服务
             $COMPOSE_COMMAND build
 
             echo "Stopping and removing old containers..."
