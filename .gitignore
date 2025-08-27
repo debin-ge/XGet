@@ -15,7 +15,6 @@ build/
 
 # Node
 /frontend-service/node_modules/
-/frontend-service/package-lock.json
 
 # 环境变量和密钥
 .env
