@@ -47,9 +47,8 @@ services:
       # 确保数据库连接信息与PostgreSQL配置一致
       - POSTGRES_SERVER=postgres
       - POSTGRES_USER=postgres
-      - POSTGRES_PASSWORD=postgres
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-postgres}
       - POSTGRES_DB=account_db
-      - DATABASE_URL=postgresql+asyncpg://postgres:postgres@postgres/account_db
       - PROXY_SERVICE_URL=http://proxy-service:8000
     depends_on:
       - postgres
@@ -70,9 +69,8 @@ services:
       # 确保数据库连接信息与PostgreSQL配置一致
       - POSTGRES_SERVER=postgres
       - POSTGRES_USER=postgres
-      - POSTGRES_PASSWORD=postgres
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-postgres}
       - POSTGRES_DB=proxy_db
-      - DATABASE_URL=postgresql+asyncpg://postgres:postgres@postgres/proxy_db
     depends_on:
       - postgres
     networks:
@@ -92,9 +90,8 @@ services:
       # 添加PostgreSQL数据库配置
       - POSTGRES_SERVER=postgres
       - POSTGRES_USER=postgres
-      - POSTGRES_PASSWORD=postgres
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-postgres}
       - POSTGRES_DB=scraper_db
-      - DATABASE_URL=postgresql+asyncpg://postgres:postgres@postgres/scraper_db
       - MONGODB_URI=mongodb://mongodb:27017/scraper
       - KAFKA_BOOTSTRAP_SERVERS=kafka:9092
       - ACCOUNT_SERVICE_URL=http://account-service:8000
@@ -197,9 +194,8 @@ services:
       - LOG_LEVEL=DEBUG
       - POSTGRES_SERVER=postgres
       - POSTGRES_USER=postgres
-      - POSTGRES_PASSWORD=postgres
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-postgres}
       - POSTGRES_DB=user_db
-      - DATABASE_URL=postgresql://postgres:postgres@postgres/user_db
       - REDIS_URL=redis://redis:6379/0
       - SECRET_KEY=your-secret-key-here
       - ACCESS_TOKEN_EXPIRE_MINUTES=30
@@ -240,7 +236,7 @@ services:
       - "5432:5432"
     environment:
       - POSTGRES_USER=postgres
-      - POSTGRES_PASSWORD=postgres
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-postgres}
     volumes:
       - postgres-data:/var/lib/postgresql/data
       - ./db/postgres/init.sql:/docker-entrypoint-initdb.d/init.sql
