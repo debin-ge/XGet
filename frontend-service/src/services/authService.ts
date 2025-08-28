@@ -14,7 +14,6 @@ class AuthService {
   async login(loginData: LoginParams): Promise<LoginResponse> {
     try {
       const response = await authApi.login(loginData)
-      
       // 保存token和用户信息
       this.setToken(response.access_token)
       this.setRefreshToken(response.refresh_token)

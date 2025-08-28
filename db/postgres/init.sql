@@ -2,8 +2,39 @@
 CREATE DATABASE account_db;
 CREATE DATABASE proxy_db;
 CREATE DATABASE scraper_db;
-CREATE DATABASE processing_db;
-CREATE DATABASE storage_db;
+CREATE DATABASE user_db;
+
+-- 切换到用户数据库
+\c user_db;
+
+-- 创建用户表
+CREATE TABLE users (
+    id VARCHAR(36) PRIMARY KEY,
+    username VARCHAR(255) NOT NULL UNIQUE,
+    email VARCHAR(255) NOT NULL UNIQUE,
+    password_hash VARCHAR(255) NOT NULL,
+    role VARCHAR(50) DEFAULT 'USER',
+    is_active BOOLEAN DEFAULT TRUE,
+    last_login TIMESTAMP,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- 创建用户会话表
+CREATE TABLE user_sessions (
+    id VARCHAR(36) PRIMARY KEY,
+    user_id VARCHAR(36) REFERENCES users(id) ON DELETE CASCADE,
+    refresh_token VARCHAR(500) NOT NULL,
+    expires_at TIMESTAMP NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- 创建索引以提高查询性能
+CREATE INDEX idx_users_email ON users(email);
+CREATE INDEX idx_users_username ON users(username);
+CREATE INDEX idx_user_sessions_user_id ON user_sessions(user_id);
+CREATE INDEX idx_user_sessions_refresh_token ON user_sessions(refresh_token);
 
 -- 切换到账户数据库
 \c account_db;
@@ -23,9 +54,14 @@ CREATE TABLE accounts (
     active BOOLEAN DEFAULT FALSE,
     last_used TIMESTAMP,
     error_msg VARCHAR(500),
+    is_deleted BOOLEAN DEFAULT FALSE,
+    deleted_at TIMESTAMP,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
+
+-- 创建索引以提高查询性能
+CREATE INDEX idx_accounts_is_deleted ON accounts(is_deleted);
 
 -- 创建登录历史表
 CREATE TABLE login_history (
@@ -128,107 +164,3 @@ CREATE TABLE task_executions (
     error_message VARCHAR(500)
 );
 
--- 切换到处理服务数据库
-\c processing_db;
-
--- 创建处理任务表
-CREATE TABLE processing_tasks (
-    id VARCHAR(36) PRIMARY KEY,
-    task_type VARCHAR(50) NOT NULL,
-    source_data_id VARCHAR(36) NOT NULL,
-    parameters JSONB,
-    status VARCHAR(50) DEFAULT 'pending',
-    priority VARCHAR(50) DEFAULT 'normal',
-    progress FLOAT DEFAULT 0.0,
-    error_message VARCHAR(500),
-    result_id VARCHAR(36),
-    callback_url VARCHAR(500),
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    started_at TIMESTAMP,
-    completed_at TIMESTAMP
-);
-
--- 创建处理规则表
-CREATE TABLE processing_rules (
-    id VARCHAR(36) PRIMARY KEY,
-    name VARCHAR(255) NOT NULL,
-    description TEXT,
-    task_type VARCHAR(50) NOT NULL,
-    rule_definition JSONB NOT NULL,
-    is_active BOOLEAN DEFAULT TRUE,
-    version INTEGER DEFAULT 1,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-);
-
--- 创建处理结果表
-CREATE TABLE processing_results (
-    id VARCHAR(36) PRIMARY KEY,
-    task_id VARCHAR(36) REFERENCES processing_tasks(id) NOT NULL,
-    data JSONB,
-    metadata JSONB,
-    storage_location VARCHAR(500),
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-);
-
--- 切换到存储服务数据库
-\c storage_db;
-
--- 创建存储项表
-CREATE TABLE storage_items (
-    id VARCHAR(36) PRIMARY KEY,
-    data_type VARCHAR(50) NOT NULL,
-    content_hash VARCHAR(255),
-    size INTEGER,
-    storage_location VARCHAR(500) NOT NULL,
-    storage_backend VARCHAR(50) NOT NULL,
-    compression BOOLEAN DEFAULT FALSE,
-    encryption BOOLEAN DEFAULT FALSE,
-    version INTEGER DEFAULT 1,
-    status VARCHAR(50) DEFAULT 'stored',
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    accessed_at TIMESTAMP
-);
-
--- 创建元数据表
-CREATE TABLE metadata (
-    item_id VARCHAR(36) PRIMARY KEY REFERENCES storage_items(id),
-    source_id VARCHAR(36),
-    processing_id VARCHAR(36),
-    tags JSONB,
-    custom_fields JSONB,
-    retention_policy VARCHAR(50),
-    access_count INTEGER DEFAULT 0,
-    last_accessed TIMESTAMP,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-);
-
--- 创建存储后端表
-CREATE TABLE storage_backends (
-    id VARCHAR(36) PRIMARY KEY,
-    name VARCHAR(255) NOT NULL UNIQUE,
-    type VARCHAR(50) NOT NULL,
-    configuration JSONB NOT NULL,
-    status VARCHAR(50) DEFAULT 'active',
-    priority INTEGER DEFAULT 1,
-    capacity BIGINT,
-    used_space BIGINT DEFAULT 0,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-);
-
--- 创建保留策略表
-CREATE TABLE retention_policies (
-    id VARCHAR(36) PRIMARY KEY,
-    name VARCHAR(255) NOT NULL UNIQUE,
-    description TEXT,
-    active_period INTEGER NOT NULL,
-    archive_period INTEGER NOT NULL,
-    total_retention INTEGER NOT NULL,
-    auto_delete BOOLEAN DEFAULT FALSE,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-); 

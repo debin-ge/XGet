@@ -218,7 +218,7 @@ const loadAccounts = async () => {
     if (filterStatus.value) {
       params.active = filterStatus.value === 'active' ? true : filterStatus.value === 'inactive' ? false : undefined
     }
-    console.log("get accounts")
+
     const data = await accountApi.getAccounts(params)
     accounts.value = data.items as Account[]
     total.value = data.total
