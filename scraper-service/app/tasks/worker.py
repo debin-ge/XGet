@@ -237,7 +237,9 @@ class TaskWorker:
             proxy_info = None
             if proxy_id:
                 proxy_info = await self.proxy_client.get_proxy(proxy_id)
-                
+            
+            logger.info(f"获取用户信息为：{account_info}")
+
             # 创建Twitter抓取器
             scraper = TwitterScraper(account_info, proxy_info)
             
@@ -292,7 +294,6 @@ class TaskWorker:
                 uid = parameters.get("uid")
                 limit = parameters.get("limit", 10)
                 include_replies = parameters.get("include_replies", False)
-                include_retweets = parameters.get("include_retweets", False)
                 
                 if not uid:
                     await self.update_task_status(task_id, "FAILED", error_msg="缺少参数: uid")
@@ -304,7 +305,6 @@ class TaskWorker:
                         uid, 
                         limit=limit, 
                         include_replies=include_replies, 
-                        include_retweets=include_retweets
                     ):
                         # 检查任务是否被要求停止
                         if task_id in self.stop_tasks:

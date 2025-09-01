@@ -36,7 +36,12 @@ class ProxyClient:
                 
             response = await self.client.post(f"{self.base_url}/api/v1/proxies/rotate", params=params)
             response.raise_for_status()
-            return Proxy(**response.json())
+            
+            proxy_data = response.json()
+            if not proxy_data:
+                return None
+            
+            return Proxy(**proxy_data)
         except httpx.HTTPError as e:
             logger.error(f"获取轮换代理失败: {e}")
             return None

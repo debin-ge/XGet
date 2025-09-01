@@ -14,6 +14,8 @@ const instance = axios.create({
 // 请求拦截器
 instance.interceptors.request.use(
   async (config) => {
+    console.log(authService.isAuthenticated() )
+    console.log(authService.isTokenExpiringSoon() )
     // 检查token是否即将过期，如果是则自动刷新
     if (authService.isAuthenticated() && authService.isTokenExpiringSoon()) {
       try {
@@ -53,9 +55,7 @@ instance.interceptors.response.use(
       switch (status) {
         case 401:
           // 未授权，清除本地token并跳转到登录页
-          localStorage.removeItem('access_token')
-          localStorage.removeItem('refresh_token')
-          localStorage.removeItem('user_info')
+          authService.clearAuthData()
           // 显示错误消息
           ElMessage.error('登录状态已过期，请重新登录')
           // 直接跳转到登录页面

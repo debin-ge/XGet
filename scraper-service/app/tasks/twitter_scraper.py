@@ -2,7 +2,6 @@ from typing import Dict, List, Any, Optional
 import asyncio
 from twscrape import API
 from twscrape.account import Account
-from twscrape.models import Tweet, User
 from ..schemas.result import ResultCreate
 from ..models.result import RESULT_TYPE_TWEET, RESULT_TYPE_USER, RESULT_TYPE_TOPIC, RESULT_TYPE_FOLLOWER
 from ..core.logging import logger
@@ -30,16 +29,16 @@ class TwitterScraper:
                 proxy = f"{self.proxy_info['type'].lower()}://{proxy_auth}{self.proxy_info['ip']}:{self.proxy_info['port']}"
                 
             self.account = Account(
-                username=self.account_info["username"],
-                password=self.account_info.get("password", ""),
-                email=self.account_info.get("email", ""),
-                email_password=self.account_info.get("email_password", ""),
-                user_agent=self.account_info.get("user_agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/137.0.0.0 Safari/537.36"),
+                username=self.account_info["username"] or "",
+                password=self.account_info.get("password") or "",
+                email=self.account_info.get("email") or "",
+                email_password=self.account_info.get("email_password") or "",
+                user_agent=self.account_info.get("user_agent") or "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/137.0.0.0 Safari/537.36",
                 active=True,
                 locks={},
                 stats={},
-                headers=self.account_info.get("headers", {}),
-                cookies=self.account_info.get("cookies", {}),
+                headers=self.account_info.get("headers") or {},
+                cookies=self.account_info.get("cookies") or {},
                 mfa_code=None,
                 proxy=proxy,
                 error_msg=None,
@@ -117,40 +116,56 @@ class TwitterScraper:
         uid: str, 
         limit: int = 5, 
         include_replies: bool = False, 
-        include_retweets: bool = False
     ):
         """获取用户推文（流式）"""
         try:
             self._check_cancelled()
-            logger.info(f"开始流式获取用户推文, username: {uid}, limit: {limit}, include_replies: {include_replies}, include_retweets: {include_retweets}")
+            logger.info(f"开始流式获取用户推文, username: {uid}, limit: {limit}, include_replies: {include_replies}")
             
             count = 0
-            
-            async for tweet in self.api.user_tweets(uid):
-                self._check_cancelled()
-                
-                # 检查是否已达到目标limit
-                if count >= limit:
-                    break
-                
-                # 过滤回复和转发
-                if not include_replies and tweet.in_reply_to_status_id:
-                    continue
-                if not include_retweets and tweet.retweeted_status_id:
-                    continue
+            if include_replies:
+                async for tweet in self.api.user_tweets_and_replies(uid):
+                    self._check_cancelled()
                     
-                result = ResultCreate(
-                    task_id="",  # 由调用者设置
-                    data_type=RESULT_TYPE_TWEET,
-                    data=tweet.dict(),
-                    metadata={
-                        "source": "twitter",
-                        "username": uid,
-                        "tweet_id": tweet.id
-                    }
-                )
-                yield result
-                count += 1
+                    logger.info(f"tweet is: {tweet}")
+                    # 检查是否已达到目标limit
+                    if limit > 0 and count >= limit:
+                        break
+                    
+                    result = ResultCreate(
+                        task_id="",  # 由调用者设置
+                        data_type=RESULT_TYPE_TWEET,
+                        data=tweet.dict(),
+                        metadata={
+                            "source": "twitter",
+                            "username": uid,
+                            "tweet_id": tweet.id
+                        }
+                    )
+                    yield result
+                    count += 1
+            
+            else:
+                async for tweet in self.api.user_tweets(uid):
+                    self._check_cancelled()
+                
+                    logger.info(f"tweet is: {tweet}")
+                    # 检查是否已达到目标limit
+                    if limit > 0 and count >= limit:
+                        break
+                
+                    result = ResultCreate(
+                        task_id="",  # 由调用者设置
+                        data_type=RESULT_TYPE_TWEET,
+                        data=tweet.dict(),
+                        metadata={
+                            "source": "twitter",
+                            "username": uid,
+                            "tweet_id": tweet.id
+                        }
+                    )
+                    yield result
+                    count += 1
 
             logger.info(f"流式获取用户推文完成, username: {uid}, 实际获取: {count}")
         except asyncio.CancelledError:
@@ -172,7 +187,7 @@ class TwitterScraper:
                 self._check_cancelled()
                 
                 # 检查是否已达到目标limit
-                if count >= limit:
+                if limit > 0 and count >= limit:
                     break
                 
                 result = ResultCreate(
@@ -208,7 +223,7 @@ class TwitterScraper:
                 self._check_cancelled()
                 
                 # 检查是否已达到目标limit
-                if count >= limit:
+                if limit > 0 and count >= limit:
                     break
 
                 result = ResultCreate(
@@ -268,7 +283,7 @@ class TwitterScraper:
                 self._check_cancelled()
                 
                 # 检查是否已达到目标limit
-                if count >= limit:
+                if limit > 0 and count >= limit:
                     break
                 
                 result = ResultCreate(

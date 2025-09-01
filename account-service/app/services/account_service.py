@@ -218,12 +218,18 @@ class AccountService:
             # 更新账号信息
             if cookies_dict:
                 logger.info(f"账号 {account.username} 登录成功，获取到 {len(cookies_dict)} 个cookies")
-                account.cookies = cookies_dict
-                account.active = True
-                account.last_used = datetime.now()
-                account.proxy_id = proxy_id or proxy.id
-                account.error_msg = None
-
+                await self.db.execute(
+                    update(Account)
+                    .where(Account.id == account_id)
+                    .values(
+                        cookies=cookies_dict,
+                        active=True,
+                        last_used=datetime.now(),
+                        proxy_id=proxy_id or proxy.id,
+                        error_msg=None,
+                        updated_at=datetime.now()
+                    )
+                )
                 status = "SUCCESS"
                 
                 # 缓存登录成功的账号信息（24小时）
@@ -233,42 +239,52 @@ class AccountService:
                     "username": account.username,
                     "email": account.email,
                     "login_method": account.login_method,
-                    "cookies": account.cookies,
-                    "active": account.active,
-                    "last_used": account.last_used.isoformat() if account.last_used else None,
-                    "proxy_id": account.proxy_id
+                    "cookies": cookies_dict,
+                    "active": True,
+                    "last_used": datetime.now().isoformat(),
+                    "proxy_id": proxy_id or proxy.id
                 }, expire=86400)  # 24小时缓存
             else:
                 error_msg = "登录失败，未获取到cookies"
                 logger.error(f"账号 {account.username} {error_msg}")
-                account.active = False
-                account.error_msg = self._truncate_error_msg(error_msg)
+                await self.db.execute(
+                    update(Account)
+                    .where(Account.id == account_id)
+                    .values(
+                        active=False,
+                        error_msg=self._truncate_error_msg(error_msg),
+                        updated_at=datetime.now()
+                    )
+                )
                 status = "FAILED"
-            
-            return account
             
         except Exception as e:
             error_msg = f"登录异常: {str(e)}"
             logger.error(error_msg)
-            account.active = False
-            account.error_msg = self._truncate_error_msg(error_msg)
-            
-            
-            await self.db.refresh(account)
-            return account
+            await self.db.execute(
+                update(Account)
+                .where(Account.id == account_id)
+                .values(
+                    active=False,
+                    error_msg=self._truncate_error_msg(error_msg),
+                    updated_at=datetime.now()
+                )
+            )
+            status = "FAILED"
 
         finally:
             # 记录登录历史
             await self.record_login_history(
                 account_id=account_id,
-                proxy_id=proxy.id if proxy else None,
+                proxy_id=proxy_id,
                 status=status,
                 error_msg=error_msg,
                 response_time=int((time.time() - start_time) * 1000)
             )
 
             await self.db.commit()
-            await self.db.refresh(account)
+            # 重新获取更新后的账户信息
+            return await self.get_account(account_id)
 
     async def invalidate_account_cache(self, account_id: str) -> int:
         """

@@ -124,11 +124,6 @@
             <el-switch v-model="form.parameters.include_replies" />
             <div class="form-tip">是否包含用户的回复推文</div>
           </el-form-item>
-
-          <el-form-item label="包含转发">
-            <el-switch v-model="form.parameters.include_retweets" />
-            <div class="form-tip">是否包含用户的转发推文</div>
-          </el-form-item>
         </template>
 
         <!-- 搜索推文配置 -->
@@ -226,7 +221,7 @@
           </el-form-item>
         </template>
 
-        <el-form-item>
+        <el-form-item style="flex-direction:row">
           <el-button type="primary" :loading="loading" @click="submitForm">
             创建任务
           </el-button>
@@ -267,7 +262,6 @@ const form = reactive<TaskCreateParams>({
     uid: '',
     limit: 10,
     include_replies: false,
-    include_retweets: false,
     // 搜索推文
     query: '',
     // 话题推文
@@ -334,7 +328,6 @@ const handleTypeChange = () => {
     uid: '',
     limit: 10,
     include_replies: false,
-    include_retweets: false,
     query: '',
     topic: '',
     username: ''
@@ -357,7 +350,6 @@ const submitForm = async () => {
       case 'USER_TWEETS':
         cleanParameters.uid = form.parameters.uid
         cleanParameters.include_replies = form.parameters.include_replies
-        cleanParameters.include_retweets = form.parameters.include_retweets
         break
       case 'SEARCH':
         cleanParameters.query = form.parameters.query

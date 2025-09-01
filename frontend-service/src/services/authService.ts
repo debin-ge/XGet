@@ -6,7 +6,37 @@ class AuthService {
   private readonly TOKEN_KEY = 'access_token'
   private readonly REFRESH_TOKEN_KEY = 'refresh_token'
   private readonly USER_KEY = 'user_info'
-  private readonly EXPIRES_AT_KEY = 'token_expires_at'
+
+  // Cookie工具函数
+  private setCookie(name: string, value: string, days = 7): void {
+    const date = new Date()
+    date.setTime(date.getTime() + (days * 24 * 60 * 60 * 1000))
+    const expires = `expires=${date.toUTCString()}`
+    document.cookie = `${name}=${encodeURIComponent(value)}; ${expires}; path=/`
+  }
+
+  // 设置带特定过期时间的cookie（用于token）
+  private setCookieWithExpiration(name: string, value: string, expirationMinutes: number): void {
+    const date = new Date()
+    date.setTime(date.getTime() + (expirationMinutes * 60 * 1000))
+    const expires = `expires=${date.toUTCString()}`
+    document.cookie = `${name}=${encodeURIComponent(value)}; ${expires}; path=/`
+  }
+
+  private getCookie(name: string): string | null {
+    const nameEQ = name + '='
+    const ca = document.cookie.split(';')
+    for (let i = 0; i < ca.length; i++) {
+      let c = ca[i]
+      while (c.charAt(0) === ' ') c = c.substring(1, c.length)
+      if (c.indexOf(nameEQ) === 0) return decodeURIComponent(c.substring(nameEQ.length, c.length))
+    }
+    return null
+  }
+
+  private deleteCookie(name: string): void {
+    document.cookie = `${name}=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;`
+  }
 
   /**
    * 用户登录
@@ -18,7 +48,6 @@ class AuthService {
       this.setToken(response.access_token)
       this.setRefreshToken(response.refresh_token)
       this.setUserInfo(response.user)
-      this.setTokenExpiresAt(response.expires_at)
       
       ElMessage.success('登录成功')
       return response
@@ -81,7 +110,6 @@ class AuthService {
       this.setToken(response.access_token)
       this.setRefreshToken(response.refresh_token)
       this.setUserInfo(response.user)
-      this.setTokenExpiresAt(response.expires_at)
       return true
     } catch (error) {
       console.error('Token refresh failed:', error)
@@ -108,7 +136,7 @@ class AuthService {
    * 获取token (保持向后兼容)
    */
   getToken(): string | null {
-    return localStorage.getItem(this.TOKEN_KEY)
+    return this.getCookie(this.TOKEN_KEY)
   }
 
   /**
@@ -123,28 +151,30 @@ class AuthService {
    * 设置token
    */
   private setToken(token: string): void {
-    localStorage.setItem(this.TOKEN_KEY, token)
+    // access token 通常有效期较短，设置为30分钟
+    this.setCookieWithExpiration(this.TOKEN_KEY, token, 30)
   }
 
   /**
    * 获取刷新token
    */
   getRefreshToken(): string | null {
-    return localStorage.getItem(this.REFRESH_TOKEN_KEY)
+    return this.getCookie(this.REFRESH_TOKEN_KEY)
   }
 
   /**
    * 设置刷新token
    */
   private setRefreshToken(token: string): void {
-    localStorage.setItem(this.REFRESH_TOKEN_KEY, token)
+    // refresh token 有效期较长，设置为7天
+    this.setCookieWithExpiration(this.REFRESH_TOKEN_KEY, token, 7 * 24 * 60)
   }
 
   /**
    * 获取用户信息
    */
   getUserInfo(): User | null {
-    const userStr = localStorage.getItem(this.USER_KEY)
+    const userStr = this.getCookie(this.USER_KEY)
     if (userStr) {
       try {
         return JSON.parse(userStr)
@@ -160,46 +190,40 @@ class AuthService {
    * 设置用户信息
    */
   setUserInfo(user: User): void {
-    localStorage.setItem(this.USER_KEY, JSON.stringify(user))
+    // 用户信息与refresh token有效期一致
+    this.setCookieWithExpiration(this.USER_KEY, JSON.stringify(user), 7 * 24 * 60)
   }
 
   /**
    * 检查token是否即将过期（3分钟内）
    */
   isTokenExpiringSoon(): boolean {
-    const expiresAt = this.getTokenExpiresAt()
-    if (!expiresAt) return false
+    const token = this.getToken()
+    if (!token) return false
     
+    // 从cookie中获取过期时间
+    const cookieStr = document.cookie
+    const tokenCookie = cookieStr.split(';').find(c => c.trim().startsWith(`${this.TOKEN_KEY}=`))
+    if (!tokenCookie) return false
+    
+    // 查找expires参数
+    const expiresMatch = cookieStr.match(new RegExp(`${this.TOKEN_KEY}=[^;]*;\s*expires=([^;]+)`))
+    if (!expiresMatch) return false
+    
+    const expiresTime = new Date(expiresMatch[1]).getTime()
     const now = new Date().getTime()
-    // 解析格式为 "%Y-%m-%d %H:%M:%S" 的时间字符串
-    const expiresTime = new Date(expiresAt.replace(' ', 'T') + 'Z').getTime()
     const threeMinutes = 3 * 60 * 1000 // 3分钟毫秒数
     
     return expiresTime - now <= threeMinutes
   }
 
   /**
-   * 获取token过期时间
-   */
-  getTokenExpiresAt(): string | null {
-    return localStorage.getItem(this.EXPIRES_AT_KEY)
-  }
-
-  /**
-   * 设置token过期时间
-   */
-  private setTokenExpiresAt(expiresAt: string): void {
-    localStorage.setItem(this.EXPIRES_AT_KEY, expiresAt)
-  }
-
-  /**
    * 清理认证数据
    */
-  private clearAuthData(): void {
-    localStorage.removeItem(this.TOKEN_KEY)
-    localStorage.removeItem(this.REFRESH_TOKEN_KEY)
-    localStorage.removeItem(this.USER_KEY)
-    localStorage.removeItem(this.EXPIRES_AT_KEY)
+  clearAuthData(): void {
+    this.deleteCookie(this.TOKEN_KEY)
+    this.deleteCookie(this.REFRESH_TOKEN_KEY)
+    this.deleteCookie(this.USER_KEY)
   }
 }
 

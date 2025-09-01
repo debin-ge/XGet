@@ -27,13 +27,13 @@ class PaginatedResponse(BaseModel, Generic[T]):
 
 
 class AccountBase(BaseModel):
-    username: str
-    email: str
+    username: Optional[str] = None
+    email: Optional[str] = None
     login_method: str = "TWITTER"
 
 
 class AccountCreate(AccountBase):
-    password: str
+    password: Optional[str] = None
     email_password: Optional[str] = None
 
 

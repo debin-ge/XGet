@@ -27,6 +27,6 @@ export const logout = async (): Promise<void> => {
 
 // 获取当前用户信息
 export const getCurrentUser = async () => {
-  const response = await request.get('/users/me')
+  const response = await request.get('/users/me/')
   return response.data
 } 

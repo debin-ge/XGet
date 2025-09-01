@@ -10,12 +10,30 @@ CREATE DATABASE user_db;
 -- 创建用户表
 CREATE TABLE users (
     id VARCHAR(36) PRIMARY KEY,
-    username VARCHAR(255) NOT NULL UNIQUE,
-    email VARCHAR(255) NOT NULL UNIQUE,
+    username VARCHAR(50) NOT NULL UNIQUE,
+    email VARCHAR(100) NOT NULL UNIQUE,
     password_hash VARCHAR(255) NOT NULL,
-    role VARCHAR(50) DEFAULT 'USER',
+    first_name VARCHAR(50),
+    last_name VARCHAR(50),
+    phone VARCHAR(20),
+    avatar_url VARCHAR(255),
+    
+    -- 用户状态
     is_active BOOLEAN DEFAULT TRUE,
+    is_verified BOOLEAN DEFAULT FALSE,
+    is_superuser BOOLEAN DEFAULT FALSE,
+    
+    -- 登录相关
     last_login TIMESTAMP,
+    failed_login_attempts INTEGER DEFAULT 0,
+    locked_until TIMESTAMP,
+    
+    -- 用户偏好设置
+    preferences JSONB DEFAULT '{}',
+    timezone VARCHAR(50) DEFAULT 'UTC',
+    language VARCHAR(10) DEFAULT 'en',
+    
+    -- 时间戳
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
@@ -24,10 +42,58 @@ CREATE TABLE users (
 CREATE TABLE user_sessions (
     id VARCHAR(36) PRIMARY KEY,
     user_id VARCHAR(36) REFERENCES users(id) ON DELETE CASCADE,
-    refresh_token VARCHAR(500) NOT NULL,
+    session_token VARCHAR(255) UNIQUE NOT NULL,
+    refresh_token VARCHAR(255) UNIQUE,
+    ip_address VARCHAR(45),  -- IPv6支持
+    user_agent TEXT,
+    device_info TEXT,
+    location VARCHAR(100),
+    
+    -- 会话状态
+    is_active BOOLEAN DEFAULT TRUE,
+    is_revoked BOOLEAN DEFAULT FALSE,
+    
+    -- 时间戳
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    last_activity TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     expires_at TIMESTAMP NOT NULL,
+    revoked_at TIMESTAMP
+);
+
+-- 创建角色相关表
+CREATE TABLE roles (
+    id VARCHAR(36) PRIMARY KEY,
+    name VARCHAR(50) UNIQUE NOT NULL,
+    description TEXT,
+    is_active BOOLEAN DEFAULT TRUE,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE permissions (
+    id VARCHAR(36) PRIMARY KEY,
+    name VARCHAR(100) UNIQUE NOT NULL,
+    description TEXT,
+    resource VARCHAR(50) NOT NULL,
+    action VARCHAR(50) NOT NULL,
+    is_active BOOLEAN DEFAULT TRUE,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE role_permissions (
+    role_id VARCHAR(36) REFERENCES roles(id),
+    permission_id VARCHAR(36) REFERENCES permissions(id),
+    PRIMARY KEY (role_id, permission_id)
+);
+
+CREATE TABLE user_roles (
+    id VARCHAR(36) PRIMARY KEY,
+    user_id VARCHAR(36) REFERENCES users(id) NOT NULL,
+    role_id VARCHAR(36) REFERENCES roles(id) NOT NULL,
+    assigned_by VARCHAR(36),
+    assigned_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    expires_at TIMESTAMP,
+    is_active BOOLEAN DEFAULT TRUE
 );
 
 -- 创建索引以提高查询性能
@@ -35,6 +101,32 @@ CREATE INDEX idx_users_email ON users(email);
 CREATE INDEX idx_users_username ON users(username);
 CREATE INDEX idx_user_sessions_user_id ON user_sessions(user_id);
 CREATE INDEX idx_user_sessions_refresh_token ON user_sessions(refresh_token);
+CREATE INDEX idx_user_roles_user_id ON user_roles(user_id);
+CREATE INDEX idx_user_roles_role_id ON user_roles(role_id);
+
+-- 创建用户登录历史表
+CREATE TABLE login_history (
+    id VARCHAR(36) PRIMARY KEY,
+    user_id VARCHAR(36) REFERENCES users(id) NOT NULL,
+    login_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    logout_time TIMESTAMP,
+    
+    -- 登录信息
+    ip_address VARCHAR(45),
+    user_agent TEXT,
+    device_info TEXT,
+    location VARCHAR(100),
+    
+    -- 登录状态
+    is_successful BOOLEAN DEFAULT TRUE,
+    failure_reason TEXT,
+    
+    -- 会话信息
+    session_id VARCHAR(36) REFERENCES user_sessions(id)
+);
+
+CREATE INDEX idx_login_history_user_id ON login_history(user_id);
+CREATE INDEX idx_login_history_login_time ON login_history(login_time);
 
 -- 切换到账户数据库
 \c account_db;
@@ -42,7 +134,7 @@ CREATE INDEX idx_user_sessions_refresh_token ON user_sessions(refresh_token);
 -- 创建账户表
 CREATE TABLE accounts (
     id VARCHAR(36) PRIMARY KEY,
-    username VARCHAR(255) NOT NULL UNIQUE,
+    username VARCHAR(255) NOT NULL,
     password VARCHAR(255),
     email VARCHAR(255),
     email_password VARCHAR(255),
@@ -71,7 +163,6 @@ CREATE TABLE login_history (
     login_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     status VARCHAR(50),
     error_msg VARCHAR(500),
-    cookies_count INTEGER DEFAULT 0,
     response_time INTEGER
 );
 
@@ -115,21 +206,32 @@ CREATE TABLE proxy_qualities (
 CREATE TABLE proxy_usage_history (
     id VARCHAR(36) PRIMARY KEY,
     proxy_id VARCHAR(36) REFERENCES proxies(id) ON DELETE CASCADE,
-    user_id VARCHAR(36),
+    account_id VARCHAR(36),
+    task_id VARCHAR(36),
     service_name VARCHAR(255),
     success VARCHAR(20) DEFAULT 'SUCCESS',
     response_time INTEGER,
+    
+    proxy_ip VARCHAR(255),
+    proxy_port INTEGER,
+    account_username_email VARCHAR(255),
+    task_name VARCHAR(255),
+    quality_score FLOAT,
+    latency INTEGER,
+    
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
 -- 创建索引以提高查询性能
 CREATE INDEX idx_proxy_usage_history_proxy_id ON proxy_usage_history(proxy_id);
-CREATE INDEX idx_proxy_usage_history_user_id ON proxy_usage_history(user_id);
+CREATE INDEX idx_proxy_usage_history_account_id ON proxy_usage_history(account_id);
 CREATE INDEX idx_proxy_usage_history_service_name ON proxy_usage_history(service_name);
 CREATE INDEX idx_proxy_usage_history_success ON proxy_usage_history(success);
 CREATE INDEX idx_proxy_usage_history_created_at ON proxy_usage_history(created_at);
 CREATE INDEX idx_proxy_usage_history_proxy_created ON proxy_usage_history(proxy_id, created_at);
+CREATE INDEX idx_proxy_usage_history_account_email ON proxy_usage_history(account_username_email);
+CREATE INDEX idx_proxy_usage_history_task_name ON proxy_usage_history(task_name);
 
 -- 切换到爬虫数据库
 \c scraper_db;
@@ -137,6 +239,8 @@ CREATE INDEX idx_proxy_usage_history_proxy_created ON proxy_usage_history(proxy_
 -- 创建任务表
 CREATE TABLE tasks (
     id VARCHAR(36) PRIMARY KEY,
+    task_name VARCHAR(255) NOT NULL,  -- 任务名称
+    describe TEXT,  -- 任务描述
     task_type VARCHAR(50) NOT NULL,
     parameters JSONB NOT NULL,
     account_id VARCHAR(36),
@@ -144,7 +248,8 @@ CREATE TABLE tasks (
     status VARCHAR(50) DEFAULT 'PENDING',
     progress FLOAT DEFAULT 0.0,
     result_count INTEGER DEFAULT 0,
-    error_message VARCHAR(500),
+    error_message TEXT,  -- 错误信息
+    user_id VARCHAR(36) NOT NULL,  -- 创建任务的用户ID
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     started_at TIMESTAMP,

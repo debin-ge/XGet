@@ -211,7 +211,7 @@ async def get_proxy_stats(
         }
     }
 
-@router.post("/rotate", response_model=ProxyResponse)
+@router.post("/rotate", response_model=Optional[ProxyResponse])
 async def rotate_proxy(
     country: Optional[str] = None,
     max_latency: Optional[int] = None,
@@ -229,9 +229,6 @@ async def rotate_proxy(
         min_success_rate=min_success_rate,
         min_quality_score=min_quality_score
     )
-    
-    if not proxy:
-        raise HTTPException(status_code=404, detail="No available proxy found")
     
     return proxy
 
