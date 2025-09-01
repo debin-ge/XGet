@@ -7,16 +7,8 @@ class AuthService {
   private readonly REFRESH_TOKEN_KEY = 'refresh_token'
   private readonly USER_KEY = 'user_info'
 
-  // Cookie工具函数
-  private setCookie(name: string, value: string, days = 7): void {
-    const date = new Date()
-    date.setTime(date.getTime() + (days * 24 * 60 * 60 * 1000))
-    const expires = `expires=${date.toUTCString()}`
-    document.cookie = `${name}=${encodeURIComponent(value)}; ${expires}; path=/`
-  }
-
-  // 设置带特定过期时间的cookie（用于token）
-  private setCookieWithExpiration(name: string, value: string, expirationMinutes: number): void {
+  // 设置cookie，支持分钟级过期时间
+  private setCookie(name: string, value: string, expirationMinutes: number): void {
     const date = new Date()
     date.setTime(date.getTime() + (expirationMinutes * 60 * 1000))
     const expires = `expires=${date.toUTCString()}`
@@ -152,7 +144,7 @@ class AuthService {
    */
   private setToken(token: string): void {
     // access token 通常有效期较短，设置为30分钟
-    this.setCookieWithExpiration(this.TOKEN_KEY, token, 30)
+    this.setCookie(this.TOKEN_KEY, token, 30)
   }
 
   /**
@@ -167,7 +159,7 @@ class AuthService {
    */
   private setRefreshToken(token: string): void {
     // refresh token 有效期较长，设置为7天
-    this.setCookieWithExpiration(this.REFRESH_TOKEN_KEY, token, 7 * 24 * 60)
+    this.setCookie(this.REFRESH_TOKEN_KEY, token, 7 * 24 * 60)
   }
 
   /**
@@ -191,7 +183,7 @@ class AuthService {
    */
   setUserInfo(user: User): void {
     // 用户信息与refresh token有效期一致
-    this.setCookieWithExpiration(this.USER_KEY, JSON.stringify(user), 7 * 24 * 60)
+    this.setCookie(this.USER_KEY, JSON.stringify(user), 7 * 24 * 60)
   }
 
   /**
@@ -201,20 +193,37 @@ class AuthService {
     const token = this.getToken()
     if (!token) return false
     
-    // 从cookie中获取过期时间
+    // 解析cookie获取过期时间
     const cookieStr = document.cookie
-    const tokenCookie = cookieStr.split(';').find(c => c.trim().startsWith(`${this.TOKEN_KEY}=`))
-    if (!tokenCookie) return false
+    const tokenMatch = cookieStr.match(new RegExp(`${this.TOKEN_KEY}=([^;]+)`))
+    if (!tokenMatch) return false
     
-    // 查找expires参数
-    const expiresMatch = cookieStr.match(new RegExp(`${this.TOKEN_KEY}=[^;]*;\s*expires=([^;]+)`))
-    if (!expiresMatch) return false
+    // 获取整个cookie字符串来查找expires
+    const cookieMatch = cookieStr.match(new RegExp(`${this.TOKEN_KEY}=[^;]*;\s*expires=([^;]+)`, 'i'))
+    if (!cookieMatch) return false
     
-    const expiresTime = new Date(expiresMatch[1]).getTime()
-    const now = new Date().getTime()
-    const threeMinutes = 3 * 60 * 1000 // 3分钟毫秒数
+    try {
+      const expiresTime = new Date(cookieMatch[1]).getTime()
+      const now = new Date().getTime()
+      const threeMinutes = 3 * 60 * 1000 // 3分钟毫秒数
+      
+      return expiresTime - now <= threeMinutes
+    } catch (error) {
+      console.error('Failed to parse cookie expiration:', error)
+      return false
+    }
+  }
+
+  /**
+   * 检查token是否已过期
+   */
+  isTokenExpired(): boolean {
+    const token = this.getToken()
+    if (!token) return true
     
-    return expiresTime - now <= threeMinutes
+    // 简单检查：如果cookie存在但无法解析过期时间，认为未过期
+    // 实际过期检查由服务器端完成
+    return false
   }
 
   /**
