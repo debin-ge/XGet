@@ -4,12 +4,14 @@ from sqlalchemy.future import select
 from sqlalchemy import update, delete, desc, func
 from ..models.task import Task
 from ..schemas.task import TaskCreate, TaskUpdate, TaskListResponse
+from ..schemas.task_execution import TaskExecutionCreate
 import uuid
 from datetime import datetime
 from ..core.logging import logger
 from ..core.cache import cache
 from ..core.redis import RedisManager
 from .kafka_client import kafka_client
+from .task_execution_service import TaskExecutionService
 
 class TaskService:
     def __init__(self, db: AsyncSession):
@@ -54,6 +56,17 @@ class TaskService:
         
         # 确保在返回之前刷新对象状态
         await self.db.refresh(task)
+        
+        # 创建任务执行记录
+        execution_service = TaskExecutionService(self.db)
+        execution_data = TaskExecutionCreate(
+            task_id=task.id,
+            account_id=task.account_id,
+            proxy_id=task.proxy_id,
+            status="PENDING",
+            started_at=datetime.now()
+        )
+        await execution_service.create_execution(execution_data)
         
         return task
 
@@ -141,7 +154,7 @@ class TaskService:
 
     async def update_task(self, task_id: str, task_data: TaskUpdate) -> Optional[Task]:
         """更新任务信息"""
-        update_data = task_data.dict(exclude_unset=True)
+        update_data = task_data.model_dump(exclude_unset=True)
         update_data["updated_at"] = datetime.now()
             
         await self.db.execute(

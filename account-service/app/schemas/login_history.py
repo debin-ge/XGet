@@ -9,7 +9,6 @@ class LoginHistoryResponse(BaseModel):
     proxy_id: Optional[str] = None
     status: str  # SUCCESS, FAILED
     error_msg: Optional[str] = None
-    cookies_count: int = 0
     response_time: Optional[int] = None  # milliseconds
     login_time: datetime
     

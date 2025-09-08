@@ -255,7 +255,6 @@ GET /api/v1/login-history?page=1&size=20&account_id={account_id}&status=SUCCESS
       "proxy_id": "550e8400-e29b-41d4-a716-446655440001",
       "login_time": "2023-06-01T13:30:00",
       "status": "SUCCESS",
-      "cookies_count": 15,
       "response_time": 5230
     }
   ],
@@ -282,7 +281,6 @@ GET /api/v1/login-history/account/{account_id}?page=1&size=20
       "proxy_id": "550e8400-e29b-41d4-a716-446655440001",
       "login_time": "2023-06-01T13:30:00",
       "status": "SUCCESS",
-      "cookies_count": 15,
       "response_time": 5230
     },
     {
@@ -292,7 +290,6 @@ GET /api/v1/login-history/account/{account_id}?page=1&size=20
       "login_time": "2023-06-01T12:30:00",
       "status": "FAILED",
       "error_msg": "登录失败，未获取到cookies",
-      "cookies_count": 0,
       "response_time": 4500
     }
   ],
@@ -379,7 +376,6 @@ for entry in history:
     msg = f"- {time}: 登录{status}"
     
     if entry["status"] == "SUCCESS":
-        msg += f", 获取到 {entry['cookies_count']} 个cookies"
         msg += f", 响应时间: {entry['response_time']}ms"
     else:
         msg += f", 错误: {entry['error_msg']}"
@@ -419,7 +415,6 @@ for entry in history:
 | login_time | DateTime | 登录时间 |
 | status | String | 状态 (SUCCESS, FAILED) |
 | error_msg | String | 错误信息 |
-| cookies_count | Integer | cookies数量 |
 | response_time | Integer | 响应时间(毫秒) |
 
 ## 开发和贡献
