@@ -22,7 +22,7 @@ class Settings(BaseSettings):
         "user-service": os.getenv("USER_SERVICE_URL", "http://user-service:8000"),
         # "processing-service": os.getenv("PROCESSING_SERVICE_URL", "http://processing-service:8000"),
         # "storage-service": os.getenv("STORAGE_SERVICE_URL", "http://storage-service:8000"),
-        # "analytics-service": os.getenv("ANALYTICS_SERVICE_URL", "http://analytics-service:8000"),
+        "analytics-service": os.getenv("ANALYTICS_SERVICE_URL", "http://analytics-service:8000"),
         # "monitoring-service": os.getenv("MONITORING_SERVICE_URL", "http://monitoring-service:8000"),
     }
     

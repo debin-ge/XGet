@@ -12,18 +12,14 @@ export interface DashboardStats {
     active: number
     inactive: number
     suspended: number
+    loginSuccessRate: number
   }
   proxies: {
     total: number
     active: number
     inactive: number
     averageSpeed: number
-  }
-  results: {
-    totalCount: number
-    todayCount: number
-    weekCount: number
-    monthCount: number
+    successRate: number
   }
 }
 
@@ -67,8 +63,9 @@ export interface TrendDataPoint {
 // 活动记录
 export interface Activity {
   id: string
-  type: 'task_created' | 'task_completed' | 'task_failed' | 'account_added' | 'proxy_added' | 'user_login'
+  type: 'account' | 'proxy' | 'task' | 'system'
   title: string
+  status: string
   description?: string
   user: string
   timestamp: string

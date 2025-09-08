@@ -3,6 +3,7 @@ CREATE DATABASE account_db;
 CREATE DATABASE proxy_db;
 CREATE DATABASE scraper_db;
 CREATE DATABASE user_db;
+CREATE DATABASE analytics_db;
 
 -- 切换到用户数据库
 \c user_db;
@@ -246,14 +247,10 @@ CREATE TABLE tasks (
     account_id VARCHAR(36),
     proxy_id VARCHAR(36),
     status VARCHAR(50) DEFAULT 'PENDING',
-    progress FLOAT DEFAULT 0.0,
-    result_count INTEGER DEFAULT 0,
     error_message TEXT,  -- 错误信息
     user_id VARCHAR(36) NOT NULL,  -- 创建任务的用户ID
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    started_at TIMESTAMP,
-    completed_at TIMESTAMP
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
 -- 创建任务执行表
@@ -268,4 +265,53 @@ CREATE TABLE task_executions (
     duration INTEGER,
     error_message VARCHAR(500)
 );
+
+-- 切换到分析数据库
+\c analytics_db;
+
+-- 创建统计指标配置表
+CREATE TABLE analytics_metrics (
+    id UUID PRIMARY KEY,
+    name VARCHAR(100) NOT NULL,
+    category VARCHAR(50) NOT NULL,  -- ACCOUNT, PROXY, TASK, RESULT
+    calculation_type VARCHAR(20) NOT NULL,  -- COUNT, SUM, AVG, MAX, MIN, CUSTOM
+    data_source VARCHAR(50) NOT NULL,
+    dimensions JSONB DEFAULT '[]',
+    filters JSONB DEFAULT '{}',
+    refresh_interval INTEGER DEFAULT 3600,
+    is_active BOOLEAN DEFAULT TRUE,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- 创建实时统计结果表
+CREATE TABLE realtime_stats (
+    id UUID PRIMARY KEY,
+    metric_id UUID REFERENCES analytics_metrics(id),
+    timestamp TIMESTAMP NOT NULL,
+    value FLOAT NOT NULL,
+    dimensions JSONB DEFAULT '{}',
+    metadata JSONB DEFAULT '{}',
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- 创建历史聚合表
+CREATE TABLE historical_aggregates (
+    id UUID PRIMARY KEY,
+    metric_id UUID REFERENCES analytics_metrics(id),
+    period VARCHAR(20) NOT NULL,  -- hourly, daily, weekly, monthly
+    timestamp TIMESTAMP NOT NULL,
+    value FLOAT NOT NULL,
+    dimensions JSONB DEFAULT '{}',
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- 创建索引以提高查询性能
+CREATE INDEX idx_analytics_metrics_category ON analytics_metrics(category);
+CREATE INDEX idx_analytics_metrics_is_active ON analytics_metrics(is_active);
+CREATE INDEX idx_realtime_stats_metric_id ON realtime_stats(metric_id);
+CREATE INDEX idx_realtime_stats_timestamp ON realtime_stats(timestamp);
+CREATE INDEX idx_historical_aggregates_metric_id ON historical_aggregates(metric_id);
+CREATE INDEX idx_historical_aggregates_period ON historical_aggregates(period);
+CREATE INDEX idx_historical_aggregates_timestamp ON historical_aggregates(timestamp);
 

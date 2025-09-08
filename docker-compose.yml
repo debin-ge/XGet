@@ -15,6 +15,7 @@ services:
       - PROXY_SERVICE_URL=http://proxy-service:8000
       - SCRAPER_SERVICE_URL=http://scraper-service:8000
       - USER_SERVICE_URL=http://user-service:8000
+      - ANALYTICS_SERVICE_URL=http://analytics-service:8000
       # - PROCESSING_SERVICE_URL=http://processing-service:8000
       # - STORAGE_SERVICE_URL=http://storage-service:8000
       - REDIS_HOST=redis
@@ -28,6 +29,7 @@ services:
       - proxy-service
       - scraper-service
       - user-service
+      - analytics-service
       # - processing-service
       # - storage-service
     networks:
@@ -165,23 +167,6 @@ services:
   #     - xget-network
   #   restart: unless-stopped
 
-  # 认证服务 (未实现)
-  # auth-service:
-  #   build: ./auth-service
-  #   ports:
-  #     - "8006:8000"
-  #   environment:
-  #     - POSTGRES_SERVER=postgres
-  #     - POSTGRES_USER=postgres
-  #     - POSTGRES_PASSWORD=postgres
-  #     - POSTGRES_DB=auth_db
-  #   depends_on:
-  #     - postgres
-  #     - redis
-  #   networks:
-  #     - xget-network
-  #   restart: unless-stopped
-
   # 用户管理服务
   user-service:
     build:
@@ -205,6 +190,47 @@ services:
     depends_on:
       - postgres
       - redis
+    networks:
+      - xget-network
+    restart: unless-stopped
+
+  # 数据分析服务
+  analytics-service:
+    build:
+      context: ./analytics-service
+      dockerfile: Dockerfile
+    ports:
+      - "8005:8000"
+    environment:
+      - DEBUG=true
+      - LOG_LEVEL=INFO
+      # PostgreSQL数据库配置
+      - POSTGRES_SERVER=postgres
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-postgres}
+      - POSTGRES_DB=analytics_db
+      # Redis配置
+      - REDIS_URL=redis://redis:6379/0
+      # MongoDB配置
+      - MONGODB_URI=mongodb://mongodb:27017
+      - MONGODB_DB=scraper_db
+      # 微服务地址
+      - ACCOUNT_SERVICE_URL=http://account-service:8000
+      - PROXY_SERVICE_URL=http://proxy-service:8000
+      - SCRAPER_SERVICE_URL=http://scraper-service:8000
+      - USER_SERVICE_URL=http://user-service:8000
+      # 分析服务配置
+      - CACHE_TTL=300
+      - REAL_TIME_UPDATE_INTERVAL=60
+      - BATCH_UPDATE_INTERVAL=3600
+    depends_on:
+      - postgres
+      - redis
+      - mongodb
+      - account-service
+      - proxy-service
+      - scraper-service
+      - user-service
     networks:
       - xget-network
     restart: unless-stopped
@@ -299,63 +325,6 @@ services:
     networks:
       - xget-network
     restart: unless-stopped
-
-  # MinIO对象存储
-  # minio:
-  #   image: minio/minio
-  #   ports:
-  #     - "9000:9000"
-  #     - "9001:9001"
-  #   environment:
-  #     - MINIO_ROOT_USER=minioadmin
-  #     - MINIO_ROOT_PASSWORD=minioadmin
-  #   volumes:
-  #     - minio-data:/data
-  #   command: server /data --console-address ":9001"
-  #   networks:
-  #     - xget-network
-  #   restart: unless-stopped
-
-  # Elasticsearch搜索引擎
-  # elasticsearch:
-  #   image: elasticsearch:8.10.4
-  #   ports:
-  #     - "9200:9200"
-  #     - "9300:9300"
-  #   environment:
-  #     - discovery.type=single-node
-  #     - xpack.security.enabled=false
-  #     - "ES_JAVA_OPTS=-Xms512m -Xmx512m"
-  #   volumes:
-  #     - elasticsearch-data:/usr/share/elasticsearch/data
-  #   networks:
-  #     - xget-network
-  #   restart: unless-stopped
-
-  # Prometheus监控 (未实现)
-  # prometheus:
-  #   image: prom/prometheus
-  #   ports:
-  #     - "9090:9090"
-  #   volumes:
-  #     - ./prometheus:/etc/prometheus
-  #     - prometheus-data:/prometheus
-  #   networks:
-  #     - xget-network
-  #   restart: unless-stopped
-
-  # Grafana仪表盘 (未实现)
-  # grafana:
-  #   image: grafana/grafana
-  #   ports:
-  #     - "3000:3000"
-  #   volumes:
-  #     - grafana-data:/var/lib/grafana
-  #   depends_on:
-  #     - prometheus
-  #   networks:
-  #     - xget-network
-  #   restart: unless-stopped
 
 networks:
   xget-network:

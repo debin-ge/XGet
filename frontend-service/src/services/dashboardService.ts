@@ -1,127 +1,214 @@
 import type { DashboardStats, Activity, TrendDataPoint } from '@/types/dashboard'
+import { 
+  getAccountsRealtimeAnalytics, 
+  getProxiesRealtimeAnalytics, 
+  getTasksRealtimeAnalytics, 
+  getTasksTrends,
+  getRecentActivities
+} from '@/api/analytics'
+import type { 
+  RecentActivity
+} from '@/types/analytics'
 
 class DashboardService {
   /**
    * 获取仪表盘统计数据
    */
   async getDashboardStats(): Promise<DashboardStats> {
-      console.log('使用模拟数据: 仪表盘统计数据')
-      return this.getMockDashboardStats()
+    try {
+      console.log('获取实时分析数据...')
+      
+      // 并行获取所有实时统计数据
+      const [accountsData, proxiesData, tasksData] = await Promise.all([
+        getAccountsRealtimeAnalytics(),
+        getProxiesRealtimeAnalytics(),
+        getTasksRealtimeAnalytics(),
+      ])
+
+      // 提取数据或使用默认值
+      const accountsStats = accountsData.success ? accountsData.data : { active_accounts: 0, login_success_rate: 0 }
+      const proxiesStats = proxiesData.success ? proxiesData.data : { total_proxies: 0, active_proxies: 0, success_rate: 0, avg_speed: 0 }
+      const tasksStats = tasksData.success ? tasksData.data : { total_tasks: 0, running_tasks: 0, completed_tasks: 0, failed_tasks: 0 }
+
+      return {
+        tasks: {
+          total: tasksStats.total_tasks || 0,
+          running: tasksStats.running_tasks || 0,
+          completed: tasksStats.completed_tasks || 0,
+          failed: tasksStats.failed_tasks || 0,
+          todayCount: tasksStats.today_tasks || 0
+        },
+        accounts: {
+          total: accountsStats.total_accounts || accountsStats.active_accounts || 0,
+          active: accountsStats.active_accounts || 0,
+          inactive: (accountsStats.total_accounts || accountsStats.active_accounts || 0) - (accountsStats.active_accounts || 0),
+          suspended: 0, // 需要从账户服务获取挂起状态
+          loginSuccessRate: accountsStats.login_success_rate || 0
+        },
+        proxies: {
+          total: proxiesStats.total_proxies || 0,
+          active: proxiesStats.active_proxies || 0,
+          inactive: (proxiesStats.total_proxies || 0) - (proxiesStats.active_proxies || 0),
+          averageSpeed: proxiesStats.avg_speed || 0,
+          successRate: proxiesStats.success_rate || 0
+        }
+      }
+    } catch (error) {
+      console.error('获取仪表盘统计数据失败:', error)
+      throw new Error('无法获取仪表盘统计数据，请检查分析服务连接')
+    }
   }
 
   /**
    * 获取任务趋势数据
    */
-  async getTaskTrends(days: number = 7): Promise<TrendDataPoint[]> {
-    console.log('使用模拟数据: 任务趋势数据')
-    return this.getMockTaskTrends(days)
+  async getTaskTrends(days: number = 7): Promise<any> {
+    try {
+      console.log('获取任务趋势数据...')
+      
+      // 根据天数确定时间范围
+      let timeRange = '24h'
+      if (days === 7) timeRange = '7d'
+      else if (days === 30) timeRange = '30d'
+
+      const response = await getTasksTrends(timeRange)
+      
+      if (response.success && response.data) {
+        // 返回完整的API响应数据，让前端组件处理图表配置
+        return response.data
+      }
+      
+      // 如果API返回空数据，返回默认结构
+      return {
+        time_labels: [],
+        series_data: {
+          completed_tasks: [],
+          failed_tasks: [],
+          pending_tasks: [],
+          running_tasks: [],
+          total_tasks: [],
+          success_rate: []
+        }
+      }
+    } catch (error) {
+      console.error('获取任务趋势数据失败:', error)
+      throw new Error('无法获取任务趋势数据，请检查分析服务连接')
+    }
+  }
+
+  /**
+   * 格式化趋势标签
+   */
+  private formatTrendLabel(timestamp: string, timeRange: string): string {
+    const date = new Date(timestamp)
+    
+    if (timeRange === '24h' || timeRange === '1h') {
+      return date.toLocaleTimeString('zh-CN', { 
+        hour: '2-digit', 
+        minute: '2-digit' 
+      })
+    } else {
+      return date.toLocaleDateString('zh-CN', { 
+        month: 'short', 
+        day: 'numeric' 
+      })
+    }
   }
 
   /**
    * 获取最近活动
    */
   async getRecentActivities(limit: number = 10): Promise<Activity[]> {
-    console.log('使用模拟数据: 最近活动')
-    return this.getMockRecentActivities(limit)
-  }
-
-  /**
-   * 获取模拟仪表盘统计数据
-   */
-  private getMockDashboardStats(): DashboardStats {
-    return {
-      tasks: {
-        total: 156,
-        running: 8,
-        completed: 132,
-        failed: 16,
-        todayCount: 12
-      },
-      accounts: {
-        total: 42,
-        active: 28,
-        inactive: 10,
-        suspended: 4
-      },
-      proxies: {
-        total: 78,
-        active: 65,
-        inactive: 13,
-        averageSpeed: 256
-      },
-      results: {
-        totalCount: 12560,
-        todayCount: 342,
-        weekCount: 2189,
-        monthCount: 8921
+    try {
+      console.log('获取最近活动数据...')
+      
+      const response = await getRecentActivities(limit)
+      
+      if (response.activities) {
+        // 转换分析服务数据为前端需要的格式
+        return response.activities.map((activity: RecentActivity) => ({
+          id: activity.id,
+          type: this.mapActivityType(activity.type),
+          title: this.getActivityTitle(activity.type, activity.status),
+          status: activity.status,
+          description: activity.description,
+          user: this.extractUserFromActivity(activity),
+          timestamp: activity.timestamp,
+          metadata: activity.details
+        }))
       }
+      
+      // 如果API返回空数据，返回空数组
+      return []
+    } catch (error) {
+      console.error('获取最近活动数据失败:', error)
+      throw new Error('无法获取最近活动数据，请检查分析服务连接')
     }
   }
 
   /**
-   * 获取模拟任务趋势数据
+   * 映射活动类型
    */
-  private getMockTaskTrends(days: number = 7): TrendDataPoint[] {
-    const trends: TrendDataPoint[] = []
-    const now = new Date()
-    
-    for (let i = days - 1; i >= 0; i--) {
-      const date = new Date(now)
-      date.setDate(date.getDate() - i)
-      
-      trends.push({
-        date: date.toISOString().split('T')[0],
-        value: Math.floor(Math.random() * 50) + 20,
-        label: date.toLocaleDateString('zh-CN')
-      })
+  private mapActivityType(activityType: string): 'account' | 'proxy' | 'task' | 'system' {
+    const typeMap: Record<string, 'account' | 'proxy' | 'task' | 'system'> = {
+      'ACCOUNT_LOGIN': 'account',
+      'PROXY_USAGE': 'proxy',
+      'TASK_EXECUTION': 'task'
     }
-    
-    return trends
+    return typeMap[activityType] || 'system'
   }
 
   /**
-   * 获取模拟最近活动
+   * 获取活动标题
    */
-  private getMockRecentActivities(limit: number = 10): Activity[] {
-    const activityTypes = [
-      'task_created', 'task_completed', 'task_failed', 
-      'account_added', 'proxy_added', 'user_login'
-    ]
-    
-    const activityTitles = {
-      task_created: '新任务创建',
-      task_completed: '任务完成',
-      task_failed: '任务失败',
-      account_added: '账户添加',
-      proxy_added: '代理添加',
-      user_login: '用户登录'
+  private getActivityTitle(activityType: string, status: string): string {
+    const typeTitles: Record<string, string> = {
+      'ACCOUNT_LOGIN': '账户登录',
+      'PROXY_USAGE': '代理使用',
+      'TASK_EXECUTION': '任务执行'
     }
     
-    const users = ['admin', 'user1', 'user2', 'operator1']
-    const activities: Activity[] = []
-    const now = new Date()
-    
-    for (let i = 0; i < limit; i++) {
-      const type = activityTypes[Math.floor(Math.random() * activityTypes.length)]
-      const user = users[Math.floor(Math.random() * users.length)]
-      const timestamp = new Date(now.getTime() - Math.random() * 24 * 60 * 60 * 1000 * 3)
-      
-      activities.push({
-        id: `activity-${i}`,
-        type: type as any,
-        title: activityTitles[type as keyof typeof activityTitles],
-        user,
-        timestamp: timestamp.toISOString(),
-        metadata: {
-          taskId: type.includes('task') ? `task-${Math.floor(Math.random() * 1000)}` : undefined,
-          accountId: type.includes('account') ? `account-${Math.floor(Math.random() * 100)}` : undefined,
-          proxyId: type.includes('proxy') ? `proxy-${Math.floor(Math.random() * 100)}` : undefined
-        }
-      })
+    const statusTitles: Record<string, string> = {
+      'SUCCESS': '成功',
+      'FAILED': '失败',
+      'RUNNING': '进行中',
+      'COMPLETED': '已完成'
     }
     
-    return activities.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
+    const typeTitle = typeTitles[activityType] || '系统活动'
+    const statusTitle = statusTitles[status] || status
+    
+    return `${typeTitle}--${statusTitle}`
   }
+
+  /**
+   * 从活动数据中提取用户信息
+   */
+  private extractUserFromActivity(activity: RecentActivity): string {
+    // 尝试从details中提取用户信息
+    if (activity.details && activity.details.username) {
+      return activity.details.username
+    }
+    if (activity.details && activity.details.user_id) {
+      return `用户 ${activity.details.user_id}`
+    }
+    if (activity.details && activity.details.account_id) {
+      return `账户 ${activity.details.account_id}`
+    }
+    
+    // 根据活动类型返回默认用户
+    switch (activity.type) {
+      case 'ACCOUNT_LOGIN':
+        return '系统账户'
+      case 'PROXY_USAGE':
+        return '代理服务'
+      case 'TASK_EXECUTION':
+        return '任务执行器'
+      default:
+        return '系统用户'
+    }
+  }
+
 
   /**
    * 格式化活动时间
