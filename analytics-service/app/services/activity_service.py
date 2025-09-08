@@ -59,7 +59,7 @@ class ActivityService:
             
             async with AsyncSessionLocal() as db:
                 result = await db.execute(text("""
-                    SELECT id, account_id, login_time, status, error_msg, response_time, cookies_count
+                    SELECT id, account_id, login_time, status, error_msg, response_time
                     FROM login_history 
                     ORDER BY login_time DESC 
                     LIMIT :limit
@@ -77,7 +77,6 @@ class ActivityService:
                             "account_id": row[1],
                             "error_message": row[4],
                             "response_time": float(row[5]) if row[5] else 0.0,
-                            "cookies_count": row[6]
                         },
                         service="account"
                     )
