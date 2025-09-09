@@ -281,7 +281,7 @@ const loadDashboardData = async () => {
     updateChartOptions(trendsData)
   } catch (err) {
     console.error('Failed to load dashboard data:', err)
-    error.value = '无法加载仪表盘数据，请检查分析服务是否正常运行'
+    error.value = '无法加载仪表盘数据，请检查各服务连接是否正常'
     ElMessage.error('加载仪表盘数据失败')
   } finally {
     loading.value = false

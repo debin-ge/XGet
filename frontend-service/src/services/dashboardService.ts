@@ -1,81 +1,111 @@
-import type { DashboardStats, Activity, TrendDataPoint } from '@/types/dashboard'
-import { 
-  getAccountsRealtimeAnalytics, 
-  getProxiesRealtimeAnalytics, 
-  getTasksRealtimeAnalytics, 
-  getTasksTrends,
-  getRecentActivities
-} from '@/api/analytics'
-import type { 
-  RecentActivity
-} from '@/types/analytics'
+import type { DashboardStats, Activity } from '@/types/dashboard'
+import request from '@/utils/request'
 
 class DashboardService {
   /**
    * 获取仪表盘统计数据
+   * 直接从各服务获取实时数据
    */
   async getDashboardStats(): Promise<DashboardStats> {
     try {
-      console.log('获取实时分析数据...')
+      console.log('从各服务获取实时分析数据...')
       
-      // 并行获取所有实时统计数据
+      // 并行从各服务获取实时统计数据
       const [accountsData, proxiesData, tasksData] = await Promise.all([
-        getAccountsRealtimeAnalytics(),
-        getProxiesRealtimeAnalytics(),
-        getTasksRealtimeAnalytics(),
+        this.getAccountsRealtimeData(),
+        this.getProxiesRealtimeData(),
+        this.getTasksRealtimeData(),
       ])
-
-      // 提取数据或使用默认值
-      const accountsStats = accountsData.success ? accountsData.data : { active_accounts: 0, login_success_rate: 0 }
-      const proxiesStats = proxiesData.success ? proxiesData.data : { total_proxies: 0, active_proxies: 0, success_rate: 0, avg_speed: 0 }
-      const tasksStats = tasksData.success ? tasksData.data : { total_tasks: 0, running_tasks: 0, completed_tasks: 0, failed_tasks: 0 }
 
       return {
         tasks: {
-          total: tasksStats.total_tasks || 0,
-          running: tasksStats.running_tasks || 0,
-          completed: tasksStats.completed_tasks || 0,
-          failed: tasksStats.failed_tasks || 0,
-          todayCount: tasksStats.today_tasks || 0
+          total: tasksData.total_tasks || 0,
+          running: tasksData.running_tasks || 0,
+          completed: tasksData.completed_tasks || 0,
+          failed: tasksData.failed_tasks || 0,
+          todayCount: tasksData.today_tasks || 0
         },
         accounts: {
-          total: accountsStats.total_accounts || accountsStats.active_accounts || 0,
-          active: accountsStats.active_accounts || 0,
-          inactive: (accountsStats.total_accounts || accountsStats.active_accounts || 0) - (accountsStats.active_accounts || 0),
-          suspended: 0, // 需要从账户服务获取挂起状态
-          loginSuccessRate: accountsStats.login_success_rate || 0
+          total: accountsData.total_accounts || accountsData.active_accounts || 0,
+          active: accountsData.active_accounts || 0,
+          inactive: (accountsData.total_accounts || accountsData.active_accounts || 0) - (accountsData.active_accounts || 0),
+          suspended: accountsData.suspended_accounts || 0,
+          loginSuccessRate: accountsData.login_success_rate || 0
         },
         proxies: {
-          total: proxiesStats.total_proxies || 0,
-          active: proxiesStats.active_proxies || 0,
-          inactive: (proxiesStats.total_proxies || 0) - (proxiesStats.active_proxies || 0),
-          averageSpeed: proxiesStats.avg_speed || 0,
-          successRate: proxiesStats.success_rate || 0
+          total: proxiesData.total_proxies || 0,
+          active: proxiesData.active_proxies || 0,
+          inactive: (proxiesData.total_proxies || 0) - (proxiesData.active_proxies || 0),
+          averageSpeed: proxiesData.avg_speed || proxiesData.averageSpeed || 0,
+          successRate: proxiesData.success_rate || 0
         }
       }
     } catch (error) {
       console.error('获取仪表盘统计数据失败:', error)
-      throw new Error('无法获取仪表盘统计数据，请检查分析服务连接')
+      throw new Error('无法获取仪表盘统计数据，请检查服务连接')
+    }
+  }
+
+  /**
+   * 从账户服务获取实时数据
+   */
+  private async getAccountsRealtimeData(): Promise<any> {
+    try {
+      const response = await request.get('/accounts/analytics/realtime')
+      return response.data?.data || response.data || {}
+    } catch (error) {
+      console.warn('获取账户实时数据失败，使用默认值:', error)
+      return { active_accounts: 0, login_success_rate: 0 }
+    }
+  }
+
+  /**
+   * 从代理服务获取实时数据
+   */
+  private async getProxiesRealtimeData(): Promise<any> {
+    try {
+      const response = await request.get('/proxies/analytics/realtime')
+      return response.data?.data || response.data || {}
+    } catch (error) {
+      console.warn('获取代理实时数据失败，使用默认值:', error)
+      return { total_proxies: 0, active_proxies: 0, success_rate: 0, avg_speed: 0 }
+    }
+  }
+
+  /**
+   * 从采集服务获取实时数据
+   */
+  private async getTasksRealtimeData(): Promise<any> {
+    try {
+      const response = await request.get('/tasks/analytics/realtime')
+      return response.data?.data || response.data || {}
+    } catch (error) {
+      console.warn('获取任务实时数据失败，使用默认值:', error)
+      return { total_tasks: 0, running_tasks: 0, completed_tasks: 0, failed_tasks: 0 }
     }
   }
 
   /**
    * 获取任务趋势数据
+   * 直接从采集服务获取
    */
   async getTaskTrends(days: number = 7): Promise<any> {
     try {
-      console.log('获取任务趋势数据...')
+      console.log('从采集服务获取任务趋势数据...')
       
       // 根据天数确定时间范围
       let timeRange = '24h'
       if (days === 7) timeRange = '7d'
       else if (days === 30) timeRange = '30d'
 
-      const response = await getTasksTrends(timeRange)
+      const response = await request.get('/tasks/analytics/trends', {
+        params: { time_range: timeRange }
+      })
       
-      if (response.success && response.data) {
-        // 返回完整的API响应数据，让前端组件处理图表配置
-        return response.data
+      const data = response.data?.data || response.data || {}
+      
+      if (data && data.time_labels && data.series_data) {
+        return data
       }
       
       // 如果API返回空数据，返回默认结构
@@ -92,70 +122,121 @@ class DashboardService {
       }
     } catch (error) {
       console.error('获取任务趋势数据失败:', error)
-      throw new Error('无法获取任务趋势数据，请检查分析服务连接')
-    }
-  }
-
-  /**
-   * 格式化趋势标签
-   */
-  private formatTrendLabel(timestamp: string, timeRange: string): string {
-    const date = new Date(timestamp)
-    
-    if (timeRange === '24h' || timeRange === '1h') {
-      return date.toLocaleTimeString('zh-CN', { 
-        hour: '2-digit', 
-        minute: '2-digit' 
-      })
-    } else {
-      return date.toLocaleDateString('zh-CN', { 
-        month: 'short', 
-        day: 'numeric' 
-      })
+      throw new Error('无法获取任务趋势数据，请检查采集服务连接')
     }
   }
 
   /**
    * 获取最近活动
+   * 从各服务获取活动数据并整合排序
    */
   async getRecentActivities(limit: number = 10): Promise<Activity[]> {
     try {
-      console.log('获取最近活动数据...')
+      console.log('从各服务获取最近活动数据...')
       
-      const response = await getRecentActivities(limit)
-      
-      if (response.activities) {
-        // 转换分析服务数据为前端需要的格式
-        return response.activities.map((activity: RecentActivity) => ({
-          id: activity.id,
-          type: this.mapActivityType(activity.type),
-          title: this.getActivityTitle(activity.type, activity.status),
-          status: activity.status,
-          description: activity.description,
-          user: this.extractUserFromActivity(activity),
-          timestamp: activity.timestamp,
-          metadata: activity.details
-        }))
-      }
-      
-      // 如果API返回空数据，返回空数组
-      return []
+      // 并行从各服务获取活动数据
+      const [accountActivities, proxyActivities, taskActivities] = await Promise.all([
+        this.getAccountActivities(limit),
+        this.getProxyActivities(limit),
+        this.getTaskActivities(limit),
+      ])
+
+      // 合并所有活动数据
+      const allActivities = [
+        ...accountActivities,
+        ...proxyActivities,
+        ...taskActivities
+      ]
+
+      // 按时间戳降序排序
+      allActivities.sort((a, b) => 
+        new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
+      )
+
+      // 返回前N个活动
+      return allActivities.slice(0, limit)
     } catch (error) {
       console.error('获取最近活动数据失败:', error)
-      throw new Error('无法获取最近活动数据，请检查分析服务连接')
+      throw new Error('无法获取最近活动数据，请检查服务连接')
     }
   }
 
   /**
-   * 映射活动类型
+   * 从账户服务获取活动数据
    */
-  private mapActivityType(activityType: string): 'account' | 'proxy' | 'task' | 'system' {
-    const typeMap: Record<string, 'account' | 'proxy' | 'task' | 'system'> = {
-      'ACCOUNT_LOGIN': 'account',
-      'PROXY_USAGE': 'proxy',
-      'TASK_EXECUTION': 'task'
+  private async getAccountActivities(limit: number): Promise<Activity[]> {
+    try {
+      const response = await request.get('/accounts/analytics/activities/recent', {
+        params: { limit }
+      })
+      
+      const activities = response.data?.data || response.data || []
+      return activities.map((activity: any) => ({
+        id: activity.id || `account-${Date.now()}-${Math.random()}`,
+        type: 'account' as const,
+        title: this.getActivityTitle(activity.type || 'ACCOUNT_LOGIN', activity.status || 'UNKNOWN'),
+        status: activity.status || 'UNKNOWN',
+        description: activity.description || `账户活动: ${activity.task_name || activity.account_id || '未知账户'}`,
+        user: this.extractUserFromActivity(activity),
+        timestamp: activity.timestamp || activity.started_at || new Date().toISOString(),
+        metadata: activity.details || activity
+      }))
+    } catch (error) {
+      console.warn('获取账户活动数据失败:', error)
+      return []
     }
-    return typeMap[activityType] || 'system'
+  }
+
+  /**
+   * 从代理服务获取活动数据
+   */
+  private async getProxyActivities(limit: number): Promise<Activity[]> {
+    try {
+      const response = await request.get('/proxies/analytics/activities/recent', {
+        params: { limit }
+      })
+      
+      const activities = response.data?.data || response.data || []
+      return activities.map((activity: any) => ({
+        id: activity.id || `proxy-${Date.now()}-${Math.random()}`,
+        type: 'proxy' as const,
+        title: this.getActivityTitle(activity.type || 'PROXY_USAGE', activity.status || 'UNKNOWN'),
+        status: activity.status || 'UNKNOWN',
+        description: activity.description || `代理活动: ${activity.proxy_id || activity.proxy_name || '未知代理'}`,
+        user: this.extractUserFromActivity(activity),
+        timestamp: activity.timestamp || activity.created_at || new Date().toISOString(),
+        metadata: activity.details || activity
+      }))
+    } catch (error) {
+      console.warn('获取代理活动数据失败:', error)
+      return []
+    }
+  }
+
+  /**
+   * 从采集服务获取活动数据
+   */
+  private async getTaskActivities(limit: number): Promise<Activity[]> {
+    try {
+      const response = await request.get('/tasks/analytics/activities/recent', {
+        params: { limit }
+      })
+      
+      const activities = response.data?.data || response.data || []
+      return activities.map((activity: any) => ({
+        id: activity.id || `task-${Date.now()}-${Math.random()}`,
+        type: 'task' as const,
+        title: this.getActivityTitle(activity.type || 'TASK_EXECUTION', activity.status || 'UNKNOWN'),
+        status: activity.status || 'UNKNOWN',
+        description: activity.description || `任务活动: ${activity.task_name || activity.task_id || '未知任务'}`,
+        user: this.extractUserFromActivity(activity),
+        timestamp: activity.timestamp || activity.started_at || new Date().toISOString(),
+        metadata: activity.details || activity
+      }))
+    } catch (error) {
+      console.warn('获取任务活动数据失败:', error)
+      return []
+    }
   }
 
   /**
@@ -172,19 +253,20 @@ class DashboardService {
       'SUCCESS': '成功',
       'FAILED': '失败',
       'RUNNING': '进行中',
-      'COMPLETED': '已完成'
+      'COMPLETED': '已完成',
+      'UNKNOWN': '未知'
     }
     
     const typeTitle = typeTitles[activityType] || '系统活动'
     const statusTitle = statusTitles[status] || status
     
-    return `${typeTitle}--${statusTitle}`
+    return `${typeTitle}-${statusTitle}`
   }
 
   /**
    * 从活动数据中提取用户信息
    */
-  private extractUserFromActivity(activity: RecentActivity): string {
+  private extractUserFromActivity(activity: any): string {
     // 尝试从details中提取用户信息
     if (activity.details && activity.details.username) {
       return activity.details.username
@@ -194,6 +276,15 @@ class DashboardService {
     }
     if (activity.details && activity.details.account_id) {
       return `账户 ${activity.details.account_id}`
+    }
+    if (activity.account_id) {
+      return `账户 ${activity.account_id}`
+    }
+    if (activity.proxy_id) {
+      return `代理 ${activity.proxy_id}`
+    }
+    if (activity.task_id) {
+      return `任务 ${activity.task_id}`
     }
     
     // 根据活动类型返回默认用户
@@ -208,7 +299,6 @@ class DashboardService {
         return '系统用户'
     }
   }
-
 
   /**
    * 格式化活动时间
@@ -237,4 +327,4 @@ class DashboardService {
 
 // 导出单例实例
 export const dashboardService = new DashboardService()
-export default dashboardService 
+export default dashboardService

@@ -531,12 +531,14 @@ class TaskAnalyticsService:
             )
             trends_data = trends_query.fetchall()
             
-            # 构建时间标签和系列数据
-            x_axis = []
-            completed_series = []
-            failed_series = []
-            running_series = []
-            success_rate_series = []
+            # 构建时间标签和系列数据 - 适配前端需求
+            time_labels = []
+            completed_tasks = []
+            failed_tasks = []
+            running_tasks = []
+            pending_tasks = []
+            success_rate = []
+            total_tasks = []
             
             for row in trends_data:
                 # 格式化时间标签
@@ -547,47 +549,35 @@ class TaskAnalyticsService:
                 else:  # DAY
                     time_label = row.time_bucket.strftime("%m-%d")
                 
-                x_axis.append(time_label)
+                time_labels.append(time_label)
                 
                 total_executions = row.total_executions or 0
                 completed_executions = row.completed_executions or 0
                 failed_executions = row.failed_executions or 0
                 running_executions = row.running_executions or 0
-                success_rate = completed_executions / total_executions if total_executions > 0 else 0.0
+                pending_executions = total_executions - completed_executions - failed_executions - running_executions
+                if pending_executions < 0:
+                    pending_executions = 0
+                success_rate_value = completed_executions / total_executions if total_executions > 0 else 0.0
                 
-                completed_series.append(completed_executions)
-                failed_series.append(failed_executions)
-                running_series.append(running_executions)
-                success_rate_series.append(int(success_rate * 100))  # 转换为百分比
+                # 构建前端需要的数据结构
+                completed_tasks.append(completed_executions)
+                failed_tasks.append(failed_executions)
+                running_tasks.append(running_executions)
+                pending_tasks.append(pending_executions)
+                success_rate.append(int(success_rate_value * 100))  # 转换为百分比
+                total_tasks.append(total_executions)
             
-            # 构建系列数据
-            series = [
-                TaskTrendSeries(
-                    name="已完成",
-                    data=completed_series,
-                    type="line",
-                    smooth=True
-                ),
-                TaskTrendSeries(
-                    name="失败",
-                    data=failed_series,
-                    type="line",
-                    smooth=True
-                ),
-                TaskTrendSeries(
-                    name="运行中",
-                    data=running_series,
-                    type="line",
-                    smooth=True
-                ),
-                TaskTrendSeries(
-                    name="成功率(%)",
-                    data=success_rate_series,
-                    type="line",
-                    smooth=True
-                )
-            ]
-            
+            # 构建前端需要的数据结构
+            series_data = {
+                "completed_tasks": completed_tasks,
+                "failed_tasks": failed_tasks,
+                "running_tasks": running_tasks,
+                "pending_tasks": pending_tasks,
+                "success_rate": success_rate,
+                "total_tasks": total_tasks
+            }
+                      
             # 计算汇总统计
             total_executions = sum(row.total_executions or 0 for row in trends_data)
             total_completed = sum(row.completed_executions or 0 for row in trends_data)
@@ -603,16 +593,17 @@ class TaskAnalyticsService:
                 "overall_success_rate": round(overall_success_rate, 2)
             }
             
-            trend_data = TaskTrendData(
-                x_axis=x_axis,
-                series=[s.model_dump() for s in series],
-                summary=summary
-            )
+            # 构建前端兼容的数据结构
+            trend_data = {
+                "time_labels": time_labels,
+                "series_data": series_data,
+                "summary": summary,
+            }
             
             response_data = {
                 "success": True,
                 "message": "任务趋势数据获取成功",
-                "data": trend_data.model_dump()
+                "data": trend_data
             }
             
             # 缓存数据

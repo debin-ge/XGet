@@ -4,4 +4,4 @@ from .analytics import router as analytics_router
 
 api_router = APIRouter()
 api_router.include_router(proxies_router, prefix="/proxies", tags=["proxies"])
-api_router.include_router(analytics_router, prefix="/analytics/proxies", tags=["analytics"])
+api_router.include_router(analytics_router, prefix="/proxies/analytics", tags=["analytics"])
