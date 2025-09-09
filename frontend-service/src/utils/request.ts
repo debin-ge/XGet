@@ -14,8 +14,6 @@ const instance = axios.create({
 // 请求拦截器
 instance.interceptors.request.use(
   async (config) => {
-    console.log(authService.isAuthenticated() )
-    console.log(authService.isTokenExpiringSoon() )
     // 检查token是否即将过期，如果是则自动刷新
     if (authService.isAuthenticated() && authService.isTokenExpiringSoon()) {
       try {

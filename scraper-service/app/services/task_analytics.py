@@ -77,7 +77,6 @@ class TaskAnalyticsService:
                         COUNT(CASE WHEN status = 'FAILED' THEN 1 END) as failed_tasks,
                         AVG(duration) as avg_duration
                     FROM task_executions
-                    WHERE 1=1
                 """)
             )
             task_stats = task_stats_query.fetchone()
