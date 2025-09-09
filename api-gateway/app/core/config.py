@@ -20,10 +20,6 @@ class Settings(BaseSettings):
         "proxy-service": os.getenv("PROXY_SERVICE_URL", "http://proxy-service:8000"),
         "scraper-service": os.getenv("SCRAPER_SERVICE_URL", "http://scraper-service:8000"),
         "user-service": os.getenv("USER_SERVICE_URL", "http://user-service:8000"),
-        # "processing-service": os.getenv("PROCESSING_SERVICE_URL", "http://processing-service:8000"),
-        # "storage-service": os.getenv("STORAGE_SERVICE_URL", "http://storage-service:8000"),
-        "analytics-service": os.getenv("ANALYTICS_SERVICE_URL", "http://analytics-service:8000"),
-        # "monitoring-service": os.getenv("MONITORING_SERVICE_URL", "http://monitoring-service:8000"),
     }
     
     # 服务健康检查配置

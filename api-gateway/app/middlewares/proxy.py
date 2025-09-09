@@ -19,7 +19,6 @@ class ServiceRouter:
             "account-service": settings.SERVICES["account-service"],
             "proxy-service": settings.SERVICES["proxy-service"],
             "scraper-service": settings.SERVICES["scraper-service"],
-            "analytics-service": settings.SERVICES["analytics-service"],
         }
         
         # 创建HTTP客户端
